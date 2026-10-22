@@ -33,6 +33,13 @@ html, body {
 }
 #game { position: fixed; inset: 0; background: #101422 var(--ball); background-size: 64px; }
 #game canvas { image-rendering: pixelated; }
+#stage3d { position: fixed; inset: 0; display: none; background: #101422; touch-action: none; }
+#stage3d.on { display: block; }
+#stage3d canvas { position: absolute; left: 0; top: 0; image-rendering: pixelated; }
+#stage3d canvas.overlay { pointer-events: none; image-rendering: auto; }
+.cam-hint { position: fixed; right: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; color: #fff; text-shadow: 2px 2px 0 rgba(0,0,0,.6); background: rgba(40,48,72,.7); border: 2px solid rgba(255,255,255,.35); border-radius: 10px; padding: 6px 10px; pointer-events: none; line-height: 1.5; transition: opacity 1s; }
+.cam-hint.out { opacity: 0; }
+.sound-panel .toggle { display: flex; gap: 6px; justify-content: space-between; }
 #ui { position: fixed; inset: 0; pointer-events: none; }
 /* La interfaz se escala con la pantalla (variable --z que calcula main.js) */
 #ui, #tooltip, .location-sign, .sound-panel { zoom: var(--z, 1); }

@@ -13,6 +13,7 @@ import * as EV from './ui/events.js';
 import { talk } from './ui/npc.js';
 import { el, ui, tip } from './ui/html.js';
 import { ARENA } from './game/sim.js';
+import { Battle3D } from './three/Battle3D.js';
 import { playMusic, jingle, sfx, cry, volumes, setMusic, setSfx } from './audio.js';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -23,7 +24,14 @@ class App {
     this.speed = 1;
     this.armed = -1;
     this.orient = App.wantOrient();
+    // Vista 2.5D (three.js) por defecto si hay WebGL; se puede cambiar en el panel ♪
+    let pref = null;
+    try { pref = localStorage.getItem('how-many-pokemon-view'); } catch (e) { /* nada */ }
+    const gl = (() => { try { return !!document.createElement('canvas').getContext('webgl2'); } catch (e) { return false; } })();
+    this.use3d = gl && pref !== '2d';
   }
+
+  currentSim() { return this.b3d?.sim || this.game.scene.getScene('Battle')?.sim; }
 
   // Vertical en móviles en retrato: la arena se gira para aprovechar la pantalla.
   static wantOrient() { return window.innerHeight > window.innerWidth * 1.1 ? 'v' : 'h'; }
@@ -80,6 +88,7 @@ class App {
   clearUI() { ui().innerHTML = ''; }
 
   switchScene(key, data) {
+    if (this.b3d) { this.b3d.destroy(); this.b3d = null; }
     for (const k of ['Ranch', 'Battle', 'Boot']) if (k !== key && this.game.scene.isActive(k)) this.game.scene.stop(k);
     this.game.scene.start(key, data);
   }
@@ -220,7 +229,11 @@ class App {
     sfx('whoosh');
     this.wipe(() => {
       this.clearUI();
-      this.switchScene('Battle', { setup, act: r.act, app: this });
+      if (this.use3d) {
+        for (const k of ['Ranch', 'Battle']) if (this.game.scene.isActive(k)) this.game.scene.stop(k);
+        this.b3d = new Battle3D(this, setup, r.act);
+        this.camHint();
+      } else this.switchScene('Battle', { setup, act: r.act, app: this });
       this.renderHud();
       this.banner(boss ? `¿Cuántos Pokémon hacen falta<small>para derrotar a ${boss.name}?</small>` : `¡Pokémon salvajes!<small>Ronda ${this.run.round + 1} · ${ACTS[r.act].name}</small>`);
       this.hudFoes.forEach((f, i) => setTimeout(() => cry(f.dex, { vol: f.boss ? 0.6 : 0.4 }), 350 + i * 260));
@@ -267,6 +280,17 @@ class App {
   }
   rerenderHud() { this.renderHud(); }
 
+  camHint() {
+    let seen = false;
+    try { seen = localStorage.getItem('how-many-pokemon-camhint'); localStorage.setItem('how-many-pokemon-camhint', '1'); } catch (e) { /* nada */ }
+    if (seen) return;
+    const touch = matchMedia('(pointer: coarse)').matches;
+    const h = el(`<div class="cam-hint">${touch ? 'Pellizca: zoom<br>Arrastra: girar cámara<br>Dos dedos: mover<br>Doble toque: centrar' : 'Rueda: zoom<br>Arrastra: girar cámara<br>Clic derecho: mover<br>Doble clic: centrar'}</div>`);
+    ui().appendChild(h);
+    setTimeout(() => h.classList.add('out'), 5000);
+    setTimeout(() => h.remove(), 6200);
+  }
+
   // Registro de combate: lo más importante que va pasando
   feed(html, cls = '') {
     const box = document.querySelector('[data-feed]');
@@ -281,7 +305,7 @@ class App {
   useConsumable(i) {
     const k = this.run.consumables[i];
     if (!k) return;
-    const sim = this.game.scene.getScene('Battle').sim;
+    const sim = this.currentSim();
     if (CONSUMABLES[k].target) {
       this.armed = this.armed === i ? -1 : i;
       document.body.classList.toggle('targeting', this.armed >= 0);
@@ -300,7 +324,7 @@ class App {
   onArenaClick(x, y) {
     if (this.armed < 0) return;
     const k = this.run.consumables[this.armed];
-    const sim = this.game.scene.getScene('Battle').sim;
+    const sim = this.currentSim();
     if (sim.useConsumable(k, { x, y })) {
       this.feed(`¡Has lanzado un ${icon(CONSUMABLES[k], 'mini')} <b>${CONSUMABLES[k].name}</b>!`, 'mine');
       this.run.consumables.splice(this.armed, 1);
@@ -404,6 +428,7 @@ class App {
     const p = el(`<div class="sound-panel panel">
       <label>♪ Música <input type="range" min="0" max="1" step="0.05" value="${v.music}" data-m></label>
       <label>🔊 Efectos <input type="range" min="0" max="1" step="0.05" value="${v.sfx}" data-s></label>
+      <div class="toggle"><span>Combate</span><span><button class="btn small ${this.use3d ? 'on' : ''}" data-view="3d">2.5D</button> <button class="btn small ${this.use3d ? '' : 'on'}" data-view="2d">2D</button></span></div>
       <button class="btn small" data-x>Cerrar</button>
     </div>`);
     const r = anchor.getBoundingClientRect();
@@ -413,7 +438,15 @@ class App {
       if (e.target.matches('[data-m]')) setMusic(+e.target.value);
       if (e.target.matches('[data-s]')) { setSfx(+e.target.value); sfx('coin'); }
     });
-    p.addEventListener('click', e => { if (e.target.closest('[data-x]')) p.remove(); });
+    p.addEventListener('click', e => {
+      if (e.target.closest('[data-x]')) p.remove();
+      const vw = e.target.closest('[data-view]');
+      if (vw) {
+        this.use3d = vw.dataset.view === '3d';
+        try { localStorage.setItem('how-many-pokemon-view', vw.dataset.view); } catch (err) { /* nada */ }
+        p.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b === vw));
+      }
+    });
     document.body.appendChild(p);
   }
 }

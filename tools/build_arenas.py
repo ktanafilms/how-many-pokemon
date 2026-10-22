@@ -91,6 +91,8 @@ def nine(kind):
 
 
 def fill(img, t):
+    if LAYERED is not None and LAYERED["base"] is None:
+        LAYERED["base"] = t[0] if isinstance(t, list) else t
     for y in range(0, img.height, TS):
         for x in range(0, img.width, TS):
             img.alpha_composite(t if not isinstance(t, list) else random.choice(t), (x, y))
@@ -161,13 +163,21 @@ def candle():
     return g.resize((20, 32), Image.NEAREST)
 
 
+# Modo por capas (2.5D): los objetos de pie no se pintan en el suelo sino que se guardan
+# con su posición para levantarlos en 3D. LAYERED = {"props": [...], "tint": None, "base": None}
+LAYERED = None
+
+
 def place(img, o, x, y, items):
     items.append((y + o.height, o, x, y))
 
 
 def flush(img, items):
     for _, o, x, y in sorted(items, key=lambda t: t[0]):
-        img.alpha_composite(o, (int(x), int(y)))
+        if LAYERED is not None and o.height > 24:
+            LAYERED["props"].append((o, x, y))
+        else:
+            img.alpha_composite(o, (int(x), int(y)))
     items.clear()
 
 
@@ -268,6 +278,9 @@ def sprinkle(img, t, n, margin=64):
 
 
 def vignette(img, strength=0.55, color=(10, 12, 24)):
+    if LAYERED is not None:
+        LAYERED["fog"] = color
+        return
     W, H = img.size
     m = Image.new("L", (W, H), 0)
     d = ImageDraw.Draw(m)
@@ -282,6 +295,8 @@ def vignette(img, strength=0.55, color=(10, 12, 24)):
 
 
 def tint(img, rgb, amount):
+    if LAYERED is not None:
+        LAYERED["tint"] = (rgb, amount)
     over = Image.new("RGBA", img.size, rgb + (255,))
     m = ImageChops.multiply(img, over)
     return Image.blend(img, m, amount)
@@ -457,10 +472,61 @@ SCENES = {
     "act3": act_tower, "act4": act_safari, "act5": act_cerulean, "ranch": ranch,
 }
 
+def build_layered(name, fn, W, H, suffix):
+    """Versión 2.5D: suelo + atlas de objetos de pie + JSON con sus posiciones."""
+    global LAYERED
+    import json
+    LAYERED = {"props": [], "tint": None, "base": None, "fog": (10, 12, 24)}
+    ground = fn(W, H)
+    L = LAYERED
+    LAYERED = None
+    out3d = os.path.join(ROOT, "assets", "arenas3d")
+    os.makedirs(out3d, exist_ok=True)
+    # objetos únicos (el mismo árbol se repite muchas veces)
+    uniq, index = [], {}
+    for o, x, y in L["props"]:
+        if id(o) not in index:
+            index[id(o)] = len(uniq)
+            uniq.append(o)
+    if L["tint"]:
+        uniq = [tint(o, *L["tint"]) for o in uniq]
+    # empaquetado en estanterías
+    AW, x, y, rowh, rects = 1024, 0, 0, 0, []
+    for o in uniq:
+        if x + o.width > AW:
+            x, y, rowh = 0, y + rowh + 2, 0
+        rects.append((x, y, o.width, o.height))
+        x += o.width + 2
+        rowh = max(rowh, o.height)
+    atlas = Image.new("RGBA", (AW, max(4, y + rowh)))
+    for o, (ax, ay, _, _) in zip(uniq, rects):
+        atlas.alpha_composite(o, (ax, ay))
+    base = L["base"] if L["base"] is not None else Image.new("RGBA", (32, 32), (60, 60, 60, 255))
+    if L["tint"]:
+        base = tint(base, *L["tint"])
+    prefix = f"{name}_{suffix}"
+    ground.convert("RGB").save(os.path.join(out3d, f"{prefix}_ground.webp"), lossless=True, method=6)
+    atlas.save(os.path.join(out3d, f"{prefix}_props.png"), optimize=True)
+    base.convert("RGB").save(os.path.join(out3d, f"{prefix}_base.png"))
+    data = {
+        "w": W, "h": H, "fog": "#%02x%02x%02x" % L["fog"],
+        "sprites": [list(r) for r in rects],
+        # x, y = pie del objeto (centro abajo) en píxeles de la arena
+        "props": [[index[id(o)], round(x + o.width / 2), round(y + o.height)] for o, x, y in L["props"]],
+    }
+    json.dump(data, open(os.path.join(out3d, f"{prefix}.json"), "w"), separators=(",", ":"))
+    return len(data["props"]), len(uniq)
+
+
 if __name__ == "__main__":
+    import sys
+    only3d = "--3d" in sys.argv
     for name, fn in SCENES.items():
         for suffix, (W, H) in (("h", (1280, 720)), ("v", (720, 1280))):
+            if not only3d:
+                random.seed(zlib.crc32((name + suffix).encode()))
+                img = fn(W, H)
+                img.convert("RGB").save(os.path.join(OUT, f"{name}_{suffix}.webp"), lossless=True, method=6)
             random.seed(zlib.crc32((name + suffix).encode()))
-            img = fn(W, H)
-            img.convert("RGB").save(os.path.join(OUT, f"{name}_{suffix}.webp"), lossless=True, method=6)
-            print("ok", name, suffix)
+            n, u = build_layered(name, fn, W, H, suffix)
+            print("ok", name, suffix, f"3D: {n} objetos ({u} distintos)")
