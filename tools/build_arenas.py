@@ -267,6 +267,8 @@ def tall_patches(img, n, size=(3, 6)):
                 if (i in (0, w - 1) and j in (0, h - 1)) and random.random() < 0.6:
                     continue
                 img.alpha_composite(TALL_GRASS, ((x0 + i) * TS, (y0 + j) * TS))
+                if LAYERED is not None:
+                    LAYERED["grass"].append(((x0 + i) * TS, (y0 + j) * TS))
 
 
 def sprinkle(img, t, n, margin=64):
@@ -476,7 +478,7 @@ def build_layered(name, fn, W, H, suffix):
     """Versión 2.5D: suelo + atlas de objetos de pie + JSON con sus posiciones."""
     global LAYERED
     import json
-    LAYERED = {"props": [], "tint": None, "base": None, "fog": (10, 12, 24)}
+    LAYERED = {"props": [], "tint": None, "base": None, "fog": (10, 12, 24), "grass": []}
     ground = fn(W, H)
     L = LAYERED
     LAYERED = None
@@ -513,6 +515,8 @@ def build_layered(name, fn, W, H, suffix):
         "sprites": [list(r) for r in rects],
         # x, y = pie del objeto (centro abajo) en píxeles de la arena
         "props": [[index[id(o)], round(x + o.width / 2), round(y + o.height)] for o, x, y in L["props"]],
+        # casillas de hierba alta (esquina superior izquierda, 32 px)
+        "grass": L["grass"],
     }
     json.dump(data, open(os.path.join(out3d, f"{prefix}.json"), "w"), separators=(",", ":"))
     return len(data["props"]), len(uniq)

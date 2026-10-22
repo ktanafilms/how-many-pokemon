@@ -6,6 +6,7 @@ import { Battle } from '../game/sim.js';
 import { TRAIT_INFO } from '../data/species.js';
 import { MANIFEST, animDuration } from '../scenes/anims.js';
 import { sfx, cry } from '../audio.js';
+import { buildEnvironment } from './env.js';
 
 const ALLY_SCALE = 1.45;
 const loader = new THREE.TextureLoader();
@@ -55,7 +56,7 @@ export class Battle3D {
     this.koCount = 0;
     this.koT = 0;
     this.numT = 0;
-    this.cam = { az: 0, pitch: this.portrait ? 1.02 : 0.9, zoom: 1, px: 0, pz: 0 };
+    this.cam = { az: 0, pitch: this.portrait ? 0.8 : 0.62, zoom: 0.92, px: 0, pz: 0 };
     this.camGoal = { ...this.cam };
     this.root = document.getElementById('stage3d');
     this.ready = this.init();
@@ -84,23 +85,26 @@ export class Battle3D {
     this.ctx = this.overlay.getContext('2d');
     this.root.classList.add('on');
 
+    r.shadowMap.enabled = true;
+    r.shadowMap.type = THREE.PCFSoftShadowMap;
     const scene = this.scene = new THREE.Scene();
-    const fog = new THREE.Color(data.fog === '#0a0c18' ? '#1a2440' : data.fog);
-    scene.background = fog;
-    scene.fog = new THREE.Fog(fog, 900, 2600);
-    this.camera = new THREE.PerspectiveCamera(32, 1, 10, 6000);
-
-    // --- suelo: la arena y alrededor el mismo suelo repetido
+    this.camera = new THREE.PerspectiveCamera(40, 1, 10, 8000);
     const W = this.W, H = this.H;
-    const g = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: ground }));
+    // cielo, luces, árboles/rocas 3D, hierba y agua del acto
+    this.env = buildEnvironment(scene, this.act, W, H, data, this.portrait);
+
+    // --- suelo: la arena y alrededor el mismo suelo repetido (reciben sombras)
+    const g = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshLambertMaterial({ map: ground }));
     g.rotation.x = -Math.PI / 2;
+    g.receiveShadow = true;
     scene.add(g);
     base.wrapS = base.wrapT = THREE.RepeatWrapping;
-    const outer = 5000;
+    const outer = 6000;
     base.repeat.set(outer / 32, outer / 32);
-    const og = new THREE.Mesh(new THREE.PlaneGeometry(outer, outer), new THREE.MeshBasicMaterial({ map: base, color: 0xb0b0b0 }));
+    const og = new THREE.Mesh(new THREE.PlaneGeometry(outer, outer), new THREE.MeshLambertMaterial({ map: base, color: 0xd0d0d0 }));
     og.rotation.x = -Math.PI / 2;
-    og.position.y = -0.5;
+    og.position.y = -0.6;
+    og.receiveShadow = true;
     scene.add(og);
 
     // --- objetos de pie (árboles, rocas, lápidas…) como sprites anclados al suelo
@@ -115,6 +119,7 @@ export class Battle3D {
       // los de la franja de abajo taparían la arena con la cámara inclinada
       if (y > H - 24 && x > 0 && x < W) continue;
       const [, , w, h] = data.sprites[s];
+      if (this.env.skipProp(w, h)) continue;
       const sp = new THREE.Sprite(mats[s]);
       sp.center.set(0.5, 0.04);
       sp.scale.set(w, h, 1);
@@ -242,6 +247,7 @@ export class Battle3D {
     this.handleEvents();
     this.updateCamera(dt);
     this.sync(dt * Math.max(1, speed), now / 1000);
+    this.env.update(now / 1000);
     this.renderer.render(this.scene, this.camera);
     this.drawOverlay(dt * Math.max(1, speed), now / 1000);
     this.app.onBattleTick(this.sim);
@@ -389,7 +395,7 @@ export class Battle3D {
   }
 
   resetCamera() {
-    this.camGoal = { az: 0, pitch: this.portrait ? 1.02 : 0.9, zoom: 1, px: 0, pz: 0 };
+    this.camGoal = { az: 0, pitch: this.portrait ? 0.8 : 0.62, zoom: 0.92, px: 0, pz: 0 };
   }
 
   bindControls() {
@@ -425,7 +431,7 @@ export class Battle3D {
       }
       if (start && (start.button === 2 || start.shift)) { this.pan(dx, dy); return; }
       g.az = clamp(g.az - dx * 0.004, -0.5, 0.5);
-      g.pitch = clamp(g.pitch + dy * 0.003, 0.6, 1.3);
+      g.pitch = clamp(g.pitch + dy * 0.003, 0.32, 1.25);
     });
     const up = e => {
       pointers.delete(e.pointerId);
