@@ -322,17 +322,18 @@ def act_forest(W, H):
 
 
 def act_moon(W, H):
+    # claro de tierra dentro del cráter de Mt. Moon (encaja con el mapa 3D de Mt. Moon Square)
     img = Image.new("RGBA", (W, H))
-    p = nine("gravel")
+    p = nine("path")
     fill(img, p[1][1])
-    noise(img, (60, 55, 70), 60, 30, 90, 60)
-    noise(img, (200, 200, 220), 25, 20, 50, 35)
+    noise(img, (120, 80, 50), 60, 30, 90, 55)
+    noise(img, (230, 200, 160), 25, 20, 50, 35)
     small = [clear_bg(OBJ["boulder"]), clear_bg(OBJ["crystal"]), clear_bg(OBJ["rocksmash"])]
     scatter(img, small, 16, margin=120)
     rocks = [clear_bg(OBJ["greymound"]), clear_bg(OBJ["greystal"]), clear_bg(OBJ["greymound"]), clear_bg(OBJ["brownmound"])]
     border(img, rocks, top=120, bottom=50, side=56, hstep=0.6, vstep=0.25)
-    img = tint(img, (150, 150, 200), 0.35)
-    vignette(img, 0.8)
+    img = tint(img, (215, 180, 150), 0.25)
+    vignette(img, 0.7)
     return img
 
 

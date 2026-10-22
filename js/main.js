@@ -14,6 +14,7 @@ import { talk } from './ui/npc.js';
 import { el, ui, tip } from './ui/html.js';
 import { ARENA } from './game/sim.js';
 import { Battle3D } from './three/Battle3D.js';
+import { Ranch3D } from './three/Ranch3D.js';
 import { playMusic, jingle, sfx, cry, volumes, setMusic, setSfx } from './audio.js';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -89,6 +90,17 @@ class App {
 
   switchScene(key, data) {
     if (this.b3d) { this.b3d.destroy(); this.b3d = null; }
+    // rancho y título en 3D (Ruta 34 de HGSS)
+    if (key === 'Ranch' && this.use3d) {
+      for (const k of ['Ranch', 'Battle']) if (this.game.scene.isActive(k)) this.game.scene.stop(k);
+      const mode = data.bg === 'ranch' ? 'ranch' : 'title';
+      const portrait = data.orient === 'v';
+      if (this.ranch3d && this.ranch3d.mode === mode && this.ranch3d.portrait === portrait) { this.ranch3d.setTeam(data.team, false); return; }
+      this.ranch3d?.destroy();
+      this.ranch3d = new Ranch3D(this, { team: data.team, mode });
+      return;
+    }
+    if (this.ranch3d) { this.ranch3d.destroy(); this.ranch3d = null; }
     for (const k of ['Ranch', 'Battle', 'Boot']) if (k !== key && this.game.scene.isActive(k)) this.game.scene.stop(k);
     this.game.scene.start(key, data);
   }
@@ -191,7 +203,8 @@ class App {
     this.animateMoney(node.querySelector('[data-money]'));
     if (syncScene) {
       const sc = this.game.scene.getScene('Ranch');
-      if (sc?.scene.isActive()) sc.setTeam(this.teamEntries());
+      if (this.ranch3d) this.ranch3d.setTeam(this.teamEntries());
+      else if (sc?.scene.isActive()) sc.setTeam(this.teamEntries());
       R.save(this.run);
     }
   }
@@ -231,6 +244,7 @@ class App {
       this.clearUI();
       if (this.use3d) {
         for (const k of ['Ranch', 'Battle']) if (this.game.scene.isActive(k)) this.game.scene.stop(k);
+        if (this.ranch3d) { this.ranch3d.destroy(); this.ranch3d = null; }
         this.b3d = new Battle3D(this, setup, r.act);
         this.camHint();
       } else this.switchScene('Battle', { setup, act: r.act, app: this });

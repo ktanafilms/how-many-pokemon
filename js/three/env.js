@@ -44,46 +44,6 @@ function toonRamp() {
   return t;
 }
 
-// Textura de briznas de hierba pixelada
-function grassTexture(colors) {
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = 32;
-  const g = cv.getContext('2d');
-  const [mid, light, dark] = colors;
-  // briznas anchas con borde oscuro sólo por un lado (estilo pixel de DS)
-  const blade = (x, w, h, lean, c) => {
-    g.fillStyle = dark;
-    g.beginPath(); g.moveTo(x, 32); g.lineTo(x + w / 2 + lean - 1, 32 - h); g.lineTo(x + 2, 32); g.fill();
-    g.fillStyle = c;
-    g.beginPath(); g.moveTo(x + 1, 32); g.lineTo(x + w / 2 + lean, 32 - h); g.lineTo(x + w, 32); g.fill();
-  };
-  const bl = [[0, 9, 18, -2], [5, 10, 26, 1], [11, 9, 21, 3], [16, 10, 29, -1], [22, 9, 20, 2], [24, 8, 14, 3], [3, 8, 12, 0]];
-  bl.forEach(([x, w, h, l], i) => blade(x, w, h, l, i % 2 ? light : mid));
-  const t = new THREE.CanvasTexture(cv);
-  t.magFilter = t.minFilter = THREE.NearestFilter;
-  t.generateMipmaps = false;
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-// Geometría de dos planos cruzados (se ve con volumen desde cualquier ángulo)
-function crossGeometry() {
-  const pos = [], uv = [], idx = [];
-  for (let k = 0; k < 2; k++) {
-    const a = k * Math.PI / 2, cx = Math.cos(a) * 0.5, cz = Math.sin(a) * 0.5;
-    const b = pos.length / 3;
-    pos.push(-cx, 0, -cz, cx, 0, cz, cx, 1, cz, -cx, 1, -cz);
-    uv.push(0, 0, 1, 0, 1, 1, 0, 1);
-    idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(pos.length).fill(0).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
-  g.setIndex(idx);
-  return g;
-}
-
 // Deforma un poco los vértices para que cada roca/copa no sea perfecta
 function jitter(geo, amount, seed) {
   const p = geo.attributes.position;
@@ -149,7 +109,6 @@ export function buildEnvironment(scene, act, W, H, data, portrait, { realMap = f
 
   const W2 = W / 2, H2 = H / 2;
   const inPlay = (x, z, m = 0) => x > 56 - m && x < W - 56 + m && z > 110 - m && z < H - 40 + m;
-  const tufts = [];
 
   // --- vegetación y rocas alrededor de la arena (fuera de la zona de juego)
   const flora = S.flora;
@@ -285,41 +244,8 @@ export function buildEnvironment(scene, act, W, H, data, portrait, { realMap = f
     water.userData.uTime = uTime;
   }
 
-  // --- hierba alta en 3D (sobre las casillas de hierba alta del suelo) + matas sueltas
-  const grassTiles = data.grass || [];
-  const nT = grassTiles.length * 3 + (S.tufts || 0);
-  let grass = null;
-  if (nT && S.grassColor) {
-    const tex = grassTexture(S.grassColor);
-    const mat = new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, emissive: 0x203018, emissiveIntensity: 0.35 });
-    const uTime = { value: 0 };
-    mat.onBeforeCompile = sh => {
-      sh.uniforms.uTime = uTime;
-      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-        float ph = instanceMatrix[3].x * 0.05 + instanceMatrix[3].z * 0.07;
-        transformed.x += sin(uTime * 2.2 + ph) * position.y * 0.18;
-        transformed.z += cos(uTime * 1.7 + ph) * position.y * 0.1;`);
-    };
-    grass = new Instancer(scene, crossGeometry(), mat, nT, { shadow: false });
-    grass.mesh.userData.uTime = uTime;
-    for (const [tx, ty] of grassTiles) {
-      for (let i = 0; i < 3; i++) {
-        const x = tx + 6 + rng() * 20, z = ty + 8 + rng() * 22, s = 20 + rng() * 12;
-        grass.add(x - W2, 0, z - H2, s * 1.1, s, s * 1.1, rng() * 6);
-      }
-    }
-    for (let i = 0; i < (S.tufts || 0); i++) {
-      const x = rng() * (W + 600) - 300, z = rng() * (H + 400) - 400;
-      if (z > H - 20 && x > 0 && x < W) continue;
-      const s = 9 + rng() * 9;
-      grass.add(x - W2, 0, z - H2, s, s, s, rng() * 6);
-    }
-    grass.mesh.receiveShadow = true;
-  }
-
   return {
     update(t) {
-      if (grass) grass.mesh.userData.uTime.value = t;
       if (water) water.userData.uTime.value = t;
     },
     skipProp: (w, h) => h > 60, // los objetos grandes del 2D se sustituyen por modelos 3D
