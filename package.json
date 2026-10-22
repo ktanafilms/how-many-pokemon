@@ -1,0 +1,9 @@
+{
+  "name": "how-many-pokemon",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python3 tools/serve.py 8080",
+    "balance": "node tools/balance.js"
+  }
+}

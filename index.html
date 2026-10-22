@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#16141f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>How Many Pokémon?</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
+  <link rel="preload" href="assets/fonts/Pokemon-DP.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/fonts/Pokemon-DP-Bold.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="game"></div>
+  <div id="ui"></div>
+  <div id="tooltip" class="hidden"></div>
+  <div id="loading">
+    <div class="logo"><span class="l1">HOW MANY</span><span class="l2">POKéMON?</span></div>
+    <div class="bar"><div id="load-fill"></div></div>
+    <div id="load-text">Cargando…</div>
+  </div>
+  <script src="lib/phaser.min.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

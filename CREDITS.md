@@ -1,0 +1,179 @@
+# Créditos de sprites (PMD SpriteCollab)
+
+Sprites de https://sprites.pmdcollab.org — licencia CC BY-NC 4.0.
+
+Pokémon © Nintendo / Creatures / GAME FREAK. Proyecto fan sin ánimo de lucro.
+
+## Escenarios
+Tileset de Pokémon HeartGold/SoulSilver adaptado por **SirMaIo** (https://www.deviantart.com/sirmaio/art/HGSS-for-RMXP-837574941),
+reescalado por **jls-dchrn** (https://github.com/jls-dchrn/HGSS_pokemon_tileset). Escenarios compuestos con `tools/build_arenas.py`.
+
+## Torre Pokémon
+Tiles de la Torre Pokémon de FireRed reconstruidos desde el desensamblado **pret/pokefirered** (https://github.com/pret/pokefirered) con `tools/frlg_tower.py`.
+
+## Audio
+- Música: banda sonora de Pokémon HeartGold/SoulSilver (archive.org, `pkmn-hgss-soundtrack` y `pok-mon-heartgold-soulsilver-2009-ost`), recortada y comprimida.
+- Gritos de Pokémon: Pokémon Showdown (https://play.pokemonshowdown.com/audio/cries/).
+- Efectos: hexparrot/pokemon-assets (MIT) y efectos sintetizados en `js/audio.js`.
+
+## Personajes y tipografía
+- Sprites de entrenadores/NPC: Pokémon Showdown (https://play.pokemonshowdown.com/sprites/trainers/).
+- Fuente Power Clear (réplica de la tipografía de DS) por Peter O., vía hexparrot/pokemon-assets.
+- Icono de Poké Ball y Pokédólar: hexparrot/pokemon-assets.
+
+## Iconos
+Objetos y medallas: sprites de los juegos vía PokeAPI (https://github.com/PokeAPI/sprites).
+
+## Sprites de Pokémon
+
+- #001: CHUNSOFT
+- #002: CHUNSOFT
+- #003: CHUNSOFT
+- #004: CHUNSOFT
+- #005: <@!193530896211509248>, <@!199989579682414592>, <@!217653022094786560>, CHUNSOFT
+- #006: <@!237286997645983744>, CHUNSOFT
+- #007: CHUNSOFT
+- #008: CHUNSOFT
+- #009: CHUNSOFT
+- #010: CHUNSOFT
+- #011: CHUNSOFT
+- #012: CHUNSOFT
+- #013: CHUNSOFT
+- #014: CHUNSOFT
+- #015: CHUNSOFT
+- #016: <@!702275233125630042>, CHUNSOFT
+- #017: CHUNSOFT
+- #018: CHUNSOFT
+- #019: CHUNSOFT
+- #020: CHUNSOFT
+- #021: CHUNSOFT
+- #022: CHUNSOFT
+- #023: <@!356635814668664832>, CHUNSOFT
+- #024: CHUNSOFT
+- #025: CHUNSOFT
+- #026: <@!217653022094786560>, <@!276369635304275968>, CHUNSOFT
+- #027: <@!169247379453640706>, <@!237286997645983744>, CHUNSOFT
+- #028: <@!356635814668664832>, <@!365627932888268800>, CHUNSOFT
+- #029: CHUNSOFT
+- #030: CHUNSOFT
+- #031: CHUNSOFT
+- #032: CHUNSOFT
+- #033: CHUNSOFT
+- #034: CHUNSOFT
+- #035: CHUNSOFT
+- #036: CHUNSOFT
+- #037: CHUNSOFT
+- #038: <@!544245909639397378>, CHUNSOFT
+- #039: <@!702275233125630042>, CHUNSOFT
+- #040: CHUNSOFT
+- #041: CHUNSOFT
+- #042: CHUNSOFT
+- #043: CHUNSOFT
+- #044: CHUNSOFT
+- #045: CHUNSOFT
+- #046: CHUNSOFT
+- #047: CHUNSOFT
+- #048: <@!275075929905168384>, CHUNSOFT
+- #049: CHUNSOFT
+- #050: <@!117780585635643396>, CHUNSOFT
+- #051: <@!117780585635643396>, CHUNSOFT
+- #052: CHUNSOFT
+- #053: CHUNSOFT
+- #054: CHUNSOFT
+- #055: CHUNSOFT
+- #056: CHUNSOFT
+- #057: CHUNSOFT
+- #058: <@!1377429093997477928>, <@!356635814668664832>, CHUNSOFT
+- #059: CHUNSOFT
+- #060: CHUNSOFT
+- #061: CHUNSOFT
+- #062: CHUNSOFT
+- #063: <@!356635814668664832>, CHUNSOFT
+- #064: CHUNSOFT
+- #065: CHUNSOFT
+- #066: <@!237286997645983744>, CHUNSOFT
+- #067: CHUNSOFT
+- #068: CHUNSOFT
+- #069: CHUNSOFT
+- #070: CHUNSOFT
+- #071: CHUNSOFT
+- #072: CHUNSOFT
+- #073: CHUNSOFT
+- #074: CHUNSOFT
+- #075: <@!356635814668664832>, CHUNSOFT
+- #076: <@!356635814668664832>, CHUNSOFT
+- #077: <@!702275233125630042>, CHUNSOFT
+- #078: CHUNSOFT
+- #079: CHUNSOFT
+- #080: CHUNSOFT
+- #081: CHUNSOFT
+- #082: CHUNSOFT
+- #083: CHUNSOFT
+- #084: CHUNSOFT
+- #085: CHUNSOFT
+- #086: CHUNSOFT
+- #087: CHUNSOFT
+- #088: CHUNSOFT
+- #089: CHUNSOFT
+- #090: CHUNSOFT
+- #091: CHUNSOFT
+- #092: CHUNSOFT
+- #093: CHUNSOFT
+- #094: <@!237286997645983744>, CHUNSOFT
+- #095: CHUNSOFT
+- #096: CHUNSOFT
+- #097: CHUNSOFT
+- #098: CHUNSOFT
+- #099: CHUNSOFT
+- #100: <@!237286997645983744>, CHUNSOFT
+- #101: CHUNSOFT
+- #102: CHUNSOFT
+- #103: CHUNSOFT
+- #104: <@!356635814668664832>, <@!965734014604410990>, CHUNSOFT
+- #105: CHUNSOFT
+- #106: CHUNSOFT
+- #107: CHUNSOFT
+- #108: CHUNSOFT
+- #109: CHUNSOFT
+- #110: CHUNSOFT
+- #111: CHUNSOFT
+- #112: CHUNSOFT
+- #113: CHUNSOFT
+- #114: CHUNSOFT
+- #115: CHUNSOFT
+- #116: CHUNSOFT
+- #117: CHUNSOFT
+- #118: CHUNSOFT
+- #119: CHUNSOFT
+- #120: CHUNSOFT
+- #121: CHUNSOFT
+- #122: CHUNSOFT
+- #123: CHUNSOFT
+- #124: CHUNSOFT
+- #125: CHUNSOFT
+- #126: CHUNSOFT
+- #127: CHUNSOFT
+- #128: CHUNSOFT
+- #129: CHUNSOFT
+- #130: CHUNSOFT
+- #131: CHUNSOFT
+- #132: CHUNSOFT
+- #133: CHUNSOFT
+- #134: CHUNSOFT
+- #135: <@!474262233442942995>, CHUNSOFT
+- #136: <@!702275233125630042>, <@!722542425196724289>, CHUNSOFT
+- #137: CHUNSOFT
+- #138: CHUNSOFT
+- #139: CHUNSOFT
+- #140: <@!275075929905168384>, CHUNSOFT
+- #141: CHUNSOFT
+- #142: CHUNSOFT
+- #143: CHUNSOFT
+- #144: CHUNSOFT
+- #145: CHUNSOFT
+- #146: CHUNSOFT
+- #147: <@!702275233125630042>, CHUNSOFT
+- #148: CHUNSOFT
+- #149: <@!157796074457661440>, <@!268261643178344448>, CHUNSOFT
+- #150: <@!702275233125630042>, CHUNSOFT
+- #151: <@!702275233125630042>, CHUNSOFT
