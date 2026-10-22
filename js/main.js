@@ -29,7 +29,19 @@ class App {
   static wantOrient() { return window.innerHeight > window.innerWidth * 1.1 ? 'v' : 'h'; }
   get dims() { return this.orient === 'v' ? { w: ARENA.h, h: ARENA.w } : { w: ARENA.w, h: ARENA.h }; }
 
+  // Escala de la interfaz: grande en monitores grandes, reducida en móviles apaisados.
+  static uiScale() {
+    const w = window.innerWidth, h = window.innerHeight;
+    if ((w <= 900 && h > w) || w <= 560) return 1; // diseño móvil vertical
+    return Math.max(0.62, Math.min(1.7, Math.min(w / 1280, h / 720)));
+  }
+  applyScale() {
+    document.documentElement.style.setProperty('--z', App.uiScale().toFixed(3));
+  }
+
   watchOrientation() {
+    this.applyScale();
+    window.addEventListener('resize', () => this.applyScale());
     let t;
     window.addEventListener('resize', () => {
       clearTimeout(t);

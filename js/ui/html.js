@@ -30,19 +30,22 @@ export function modal(html, { onClose } = {}) {
 // Tooltips: cualquier elemento con data-tip (HTML)
 const tipEl = () => document.getElementById('tooltip');
 export function hideTip() { tipEl().classList.add('hidden'); }
-document.addEventListener('mouseover', e => {
+document.addEventListener('pointerover', e => {
+  if (e.pointerType !== 'mouse') return; // en táctil se usa el toque (más abajo)
   const t = e.target.closest('[data-tip]');
   if (!t) { hideTip(); return; }
   const tip = tipEl();
   tip.innerHTML = pd(decodeURIComponent(t.dataset.tip));
   tip.classList.remove('hidden');
 });
-document.addEventListener('mousemove', e => {
+const zoom = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--z')) || 1;
+document.addEventListener('pointermove', e => {
   const tip = tipEl();
-  if (tip.classList.contains('hidden')) return;
-  const w = tip.offsetWidth, h = tip.offsetHeight;
-  tip.style.left = Math.min(window.innerWidth - w - 8, e.clientX + 16) + 'px';
-  tip.style.top = Math.min(window.innerHeight - h - 8, e.clientY + 16) + 'px';
+  if (e.pointerType !== 'mouse' || tip.classList.contains('hidden')) return;
+  const z = zoom();
+  const w = tip.offsetWidth * z, h = tip.offsetHeight * z;
+  tip.style.left = Math.min(window.innerWidth - w - 8, e.clientX + 16) / z + 'px';
+  tip.style.top = Math.min(window.innerHeight - h - 8, e.clientY + 16) / z + 'px';
 });
 export const tip = html => `data-tip="${encodeURIComponent(html)}"`;
 
@@ -55,9 +58,10 @@ document.addEventListener('touchstart', e => {
   tipBox.innerHTML = pd(decodeURIComponent(t.dataset.tip));
   tipBox.classList.remove('hidden');
   const touch = e.touches[0];
-  const w = tipBox.offsetWidth, h = tipBox.offsetHeight;
-  tipBox.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, touch.clientX - w / 2)) + 'px';
-  tipBox.style.top = Math.max(8, touch.clientY - h - 24) + 'px';
+  const z = zoom();
+  const w = tipBox.offsetWidth * z, h = tipBox.offsetHeight * z;
+  tipBox.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, touch.clientX - w / 2)) / z + 'px';
+  tipBox.style.top = Math.max(8, touch.clientY - h - 24) / z + 'px';
   clearTimeout(tipTimer);
   tipTimer = setTimeout(() => tipBox.classList.add('hidden'), 3500);
 }, { passive: true });

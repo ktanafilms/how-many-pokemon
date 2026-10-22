@@ -152,7 +152,8 @@ export class BattleScene extends Phaser.Scene {
         const col = p > 0.5 ? [0x70f8a8, 0x18c020] : p > 0.2 ? [0xf8e038, 0xc8a800] : [0xf85838, 0xa82010];
         this.bars.fillStyle(col[1], 1).fillRect(x, y, w * p, bh);
         this.bars.fillStyle(col[0], 1).fillRect(x, y, w * p, Math.max(1, bh * 0.4));
-        if (v.label) v.label.setPosition(u.x, y - 3).setAlpha(this.introT > 0.3 ? 0 : 1);
+        // los nombres se ven al aparecer y luego se desvanecen (para no taparse entre sí)
+        if (v.label) v.label.setPosition(u.x, y - 3).setAlpha(this.introT > 0.3 ? 0 : Math.max(0, Math.min(1, 4.5 - this.sim.t)));
       } else if (!u.side && u.hp < u.maxHp) {
         const w = 14, x = u.x - w / 2, y = u.y - 26 - u.z;
         this.bars.fillStyle(0x1d1b2b, 0.85).fillRect(x - 1, y - 1, w + 2, 4);
