@@ -81,3 +81,10 @@ Púas, Pisotón, Llamarada/Trueno/Ventisca, Descanso, Psicoataque.
 - `js/ui/*`: interfaz del rancho y modales en HTML/CSS.
 - `js/data/*`: todo el contenido (especies, enemigos, actos, objetos) son datos → fácil añadir la 2ª generación.
 - Guardado automático en `localStorage`.
+
+## Dificultad y progresión (v2.4, inspirado en How Many Dudes)
+- **Furia acumulativa**: como el temporizador de HMD, desde los 35 s los salvajes ganan +12% de ataque cada 5 s (antes de los 60 s y cada 10 s).
+- **Pokémon Alfa** (desde el Acto 2): ×3,2 PS, ×1,45 ATQ, más grandes, con Furia y Estable; contorno dorado. Se ven en la previsión del rancho.
+- Rondas normales más duras (presupuesto y escalado mayores), menos dinero por ronda.
+- **Ligas** (Tiers de HMD): Normal → Experta → Maestra, se desbloquean ganando la anterior. Mutadores: rondas más duras, Furia antes, más Alfa, tienda más cara, jefes con más PS, KO más largos.
+- **Kill cam**: el último golpe de la ronda se ve de cerca y a cámara lenta, con bandas de cine.

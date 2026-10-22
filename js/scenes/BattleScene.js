@@ -225,7 +225,7 @@ export class BattleScene extends Phaser.Scene {
         case 'revive': { const v = this.view(e.id); if (v) { v.spr.clearTint().setAlpha(1); this.addFx('ring', 0.5, { x: v.u.x, y: v.u.y, r: 20, color: 0x7dffd0, fill: true }); } break; }
         case 'flash': this.cameras.main.flash(250, 160, 255, 160); break;
         case 'sash': { const v = this.view(e.id); if (v) this.floatText(v.u.x, v.u.y - 18, '¡Aguanta!', '#ffffff', 12); break; }
-        case 'enrage': this.app.feed('¡Los Pokémon salvajes se enfurecen! <b>Su ataque sube</b>', 'foe'); break;
+        case 'enrage': if (Math.round(e.level / 0.12) % 3 === 1) this.app.feed(`¡Los Pokémon salvajes se enfurecen! <b>Ataque +${Math.round(e.level * 100)}%</b>`, 'foe'); break;
         case 'thrown': sfx('throw'); break;
         case 'ko': sfx('allyKo'); this.koCount = (this.koCount || 0) + 1; break;
         case 'die': {

@@ -10,7 +10,7 @@ const runs = +(process.argv[2] || 5);
 const verbose = runs === 1;
 const reached = [];
 for (let n = 0; n < runs; n++) {
-  const run = R.newRun(['bulbasaur', 'charmander', 'squirtle'][n % 3]);
+  const run = R.newRun(['bulbasaur', 'charmander', 'squirtle'][n % 3], +(process.env.TIER || 0));
   let alive = true;
   while (alive && !run.won) {
     const r = R.currentRound(run);

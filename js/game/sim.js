@@ -18,7 +18,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 let nextId = 1;
 
 export class Battle {
-  constructor({ allies, enemies, round = 0, powerScale = 1, arena = ARENA }) {
+  constructor({ allies, enemies, round = 0, powerScale = 1, arena = ARENA, enrage = { start: 35, every: 5 } }) {
     this.A = arenaBounds(arena.w, arena.h);
     this.t = 0;
     this.acc = 0;
@@ -32,6 +32,7 @@ export class Battle {
     this.result = null;
     this.stats = {}; // por especie: dmg, kills, heal, ko, taken
     this.enrage = 0;
+    this.enrageCfg = enrage;
     this.grid = new Map();
 
     const rattatas = allies.filter(a => a.ability === 'manada').length;
@@ -119,7 +120,9 @@ export class Battle {
       }
     }
     // Furia de los enemigos para evitar combates eternos
-    if (this.t > 60 && Math.floor(this.t / 10) > Math.floor((this.t - dt) / 10)) {
+    // (como el temporizador de How Many Dudes: ataque acumulable cada pocos segundos)
+    const E = this.enrageCfg;
+    if (this.t > E.start && Math.floor((this.t - E.start) / E.every) > Math.floor((this.t - dt - E.start) / E.every)) {
       this.enrage += 0.12;
       this.emit('enrage', { level: this.enrage });
     }

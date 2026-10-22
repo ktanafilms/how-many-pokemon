@@ -42,15 +42,32 @@ const speciesCard = (k, extra = '', run = null) => {
 export function starterModal(done) {
   const m = scene('oak',
     '¡Bienvenido al mundo de los Pokémon! Aquí no se lucha con uno solo… ¡sino con MUCHOS! Tienes un rancho con 8 Rattatas. Elige un compañero inicial: te daré 3.',
-    `<div class="cards">${STARTERS.map(k => speciesCard(k)).join('')}</div>`);
+    `${tierPicker()}<div class="cards">${STARTERS.map(k => speciesCard(k)).join('')}</div>`);
+  let tier = R.meta().tier;
   m.addEventListener('click', e => {
+    const t = e.target.closest('[data-tier]');
+    if (t && !t.disabled) {
+      sfx('cursor');
+      tier = +t.dataset.tier;
+      m.querySelectorAll('[data-tier]').forEach(b => b.classList.toggle('on', +b.dataset.tier === tier));
+      m.querySelector('.tier-desc').textContent = R.TIERS[tier].desc;
+      return;
+    }
     const c = e.target.closest('[data-k]');
     if (!c) return;
     sfx('select');
     cry(PLAYER[c.dataset.k].stages[0].dex);
     m.close();
-    done(c.dataset.k);
+    done(c.dataset.k, tier);
   });
+}
+
+// Ligas: se desbloquean ganando la anterior (como los Tiers de How Many Dudes)
+function tierPicker() {
+  const max = R.meta().tier;
+  if (max === 0) return '';
+  const btns = R.TIERS.map((t, i) => `<button class="tier ${i === max ? 'on' : ''}" data-tier="${i}" ${i > max ? 'disabled' : ''}>${'★'.repeat(i + 1)} ${t.name}</button>`).join('');
+  return `<div class="tiers">${btns}</div><p class="tier-desc">${R.TIERS[max].desc}</p>`;
 }
 
 export function shopModal(app, done) {
@@ -255,9 +272,10 @@ export function evolutionModal(app, evo, done) {
 
 export function endScreen(app, win) {
   const run = app.run;
+  const unlocked = win && R.unlockTier((run.tier || 0) + 1);
   const m = modal(`
     <h2 class="${win ? 'win-title' : 'lose-title'}">${win ? '¡CAMPEÓN!' : '¡TE HAS QUEDADO SIN POKÉMON!'}</h2>
-    ${npcBox('oak', win ? '¡Increíble! ¡Has derrotado a Mewtwo! Ya sabemos cuántos Pokémon hacen falta… ¡los tuyos! Eres un auténtico Maestro Pokémon.' : `Has llegado a la ronda ${run.round + 1} (Acto ${R.currentRound(run).act + 1}). No te desanimes: prueba otros tipos contra los jefes y aprovecha las evoluciones.`)}
+    ${npcBox('oak', win ? `¡Increíble! ¡Has derrotado a Mewtwo en la ${R.TIERS[run.tier || 0].name}! Ya sabemos cuántos Pokémon hacen falta… ¡los tuyos!${unlocked ? ` Has desbloqueado la <b>${R.TIERS[run.tier + 1].name}</b>: ¿te atreves?` : ''}` : `Has llegado a la ronda ${run.round + 1} (Acto ${R.currentRound(run).act + 1}). No te desanimes: prueba otros tipos contra los jefes y aprovecha las evoluciones.`)}
     <table class="score">
       <tr><td>Daño total</td><td>${Math.round(run.log.dmg)}</td></tr>
       <tr><td>Pokémon salvajes derrotados</td><td>${run.log.kills}</td></tr>

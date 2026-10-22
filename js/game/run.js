@@ -19,9 +19,29 @@ export const ROUND_INFO = {
   jefe:      { name: 'Jefe', img: 'master-ball', desc: 'Un Pokémon gigante. Al ganar consigues una Medalla y el Centro Pokémon cura a todo tu equipo.' },
 };
 
-export function newRun(starter) {
+// Ligas (como los Tiers de How Many Dudes): cada una añade mutadores a la partida
+export const TIERS = [
+  { name: 'Liga Normal', desc: 'La aventura de siempre.', mods: {} },
+  { name: 'Liga Experta', desc: 'Rondas normales un 35% más duras · la Furia llega antes · más Pokémon Alfa · la tienda un 30% más cara.', mods: { foes: 0.35, enrageStart: 25, enrageEvery: 4, alpha: 0.06, cost: 0.3 } },
+  { name: 'Liga Maestra', desc: 'Rondas normales un 70% más duras · jefes con un 40% más de PS · Furia brutal · los KO duran una ronda más.', mods: { foes: 0.7, bossHp: 0.4, enrageStart: 18, enrageEvery: 3, alpha: 0.12, cost: 0.6, ko: 1 } },
+];
+const META_KEY = 'how-many-pokemon-meta';
+export function meta() {
+  try { return { tier: 0, ...JSON.parse(localStorage.getItem(META_KEY) || '{}') }; } catch (e) { return { tier: 0 }; }
+}
+export function unlockTier(t) {
+  const m = meta();
+  if (t <= m.tier) return false;
+  m.tier = Math.min(t, TIERS.length - 1);
+  try { localStorage.setItem(META_KEY, JSON.stringify(m)); } catch (e) { /* nada */ }
+  return true;
+}
+export const tierMods = run => TIERS[run.tier || 0].mods;
+
+export function newRun(starter, tier = 0) {
   const run = {
     v: 1,
+    tier,
     round: 0,
     money: 40,
     unlocked: ['rattata', starter],
@@ -159,16 +179,19 @@ export function prepareRound(run) {
   run.shopStock = null;
   const r = currentRound(run);
   if (!r) return;
-  run.enemies = generateEnemies(run.round, r);
+  run.enemies = generateEnemies(run.round, r, tierMods(run));
+  // Pokémon Alfa: más grandes, más duros y con un rasgo extra
+  const alpha = r.type === 'jefe' || r.act === 0 ? 0 : 0.03 + 0.025 * r.act + (tierMods(run).alpha || 0);
+  run.elite = run.enemies.map(() => Math.random() < alpha);
 }
 
 function enemyScale(round) {
   const act = Math.floor(round / ROUNDS_PER_ACT);
   const i = round % ROUNDS_PER_ACT;
-  return ACTS[act].mult * (1 + 0.16 * i);
+  return ACTS[act].mult * (1 + 0.2 * i);
 }
 
-export function generateEnemies(round, r) {
+export function generateEnemies(round, r, mods = {}) {
   const act = ACTS[r.act];
   const i = round % ROUNDS_PER_ACT;
   const list = [];
@@ -188,7 +211,7 @@ export function generateEnemies(round, r) {
   const kinds = shuffle(pool).slice(0, Math.min(pool.length, 1 + ((Math.random() * 3) | 0)));
   // garantizar la especie más fuerte desbloqueada a veces
   if (i >= 2 && Math.random() < 0.6) kinds[0] = pool[pool.length - 1];
-  let budget = (11 + 6 * i) * (1 + 0.45 * r.act);
+  let budget = (13 + 7.5 * i) * (1 + 0.55 * r.act) * (1 + (mods.foes || 0) * Math.min(1, (round + 1) / 8)); // la liga se nota poco a poco
   let guard = 0;
   while (budget > 0 && guard++ < 60) {
     const opts = kinds.filter(k => ENEMIES[k].cost <= budget + 1);
@@ -201,16 +224,21 @@ export function generateEnemies(round, r) {
   return list;
 }
 
-export function enemyStats(key, round) {
+export function enemyStats(key, round, elite = false, mods = {}) {
   const e = ENEMIES[key];
   const sc = enemyScale(round);
-  return {
+  const st = {
     key, name: e.name, dex: e.dex, types: e.types, atkType: e.types[0],
-    hp: e.boss ? e.hp : e.hp * sc * 2, atk: e.atk * Math.pow(sc, 0.72), as: e.as, spd: e.spd,
+    hp: e.boss ? e.hp * (1 + (mods.bossHp || 0)) : e.hp * sc * 2, atk: e.atk * Math.pow(sc, 0.8), as: e.as, spd: e.spd,
     size: e.size, boss: !!e.boss, traits: e.traits || [],
     tough: e.tough || 0, evasion: e.evasion || 0, crit: 0.05, critDmg: 0,
     lifesteal: 0, regen: 0, power: 1, range: 0,
   };
+  if (elite) {
+    Object.assign(st, { elite: true, name: `${e.name} Alfa`, hp: st.hp * 3.2, atk: st.atk * 1.45, as: st.as * 1.15, size: e.size * 1.35, crit: 0.15, tough: Math.max(st.tough, 0.15) });
+    st.traits = [...new Set([...st.traits, 'primal', 'stable'])];
+  }
+  return st;
 }
 
 export function battleSetup(run) {
@@ -221,8 +249,9 @@ export function battleSetup(run) {
     const st = unitStats(run, key);
     for (let i = 0; i < n; i++) allies.push({ ...st });
   }
-  const enemies = run.enemies.map(k => enemyStats(k, run.round));
-  return { allies, enemies, round: run.round };
+  const m = tierMods(run);
+  const enemies = run.enemies.map((k, i) => enemyStats(k, run.round, run.elite?.[i], m));
+  return { allies, enemies, round: run.round, enrage: { start: m.enrageStart ?? 35, every: m.enrageEvery ?? 5 } };
 }
 
 // ---------- Resultado del combate ----------
@@ -235,7 +264,7 @@ export function applyBattle(run, battle) {
     if (!t) continue;
     for (let i = 0; i < st.ko; i++) {
       const r = Math.random();
-      t.ko.push(r < 0.5 ? 1 : r < 0.85 ? 2 : 3);
+      t.ko.push((r < 0.5 ? 1 : r < 0.85 ? 2 : 3) + (tierMods(run).ko || 0));
     }
     if (st.ko) res.koReport.push({ key, n: st.ko });
     run.log.dmg += st.dmg;
@@ -257,10 +286,10 @@ export function applyBattle(run, battle) {
     }
   }
   // Dinero
-  const killValue = run.enemies.reduce((s, k) => s + (ENEMIES[k].cost || 10), 0);
+  const killValue = run.enemies.reduce((s, k, i) => s + (ENEMIES[k].cost || 10) * (run.elite?.[i] ? 3 : 1), 0);
   const persian = (run.spec.meowth?.stage || 0) >= 1;
   res.payday = battle.stats.meowth ? battle.stats.meowth.n * (persian ? 7 : 4) : 0;
-  res.money = Math.round((22 + 9 * (run.round + 1) + killValue * 1.6) * (1 + (g.money || 0))) + res.payday;
+  res.money = Math.round((18 + 7 * (run.round + 1) + killValue * 1.4) * (1 + (g.money || 0))) + res.payday;
   run.money += res.money;
   run.lastResult = res;
   return res;
@@ -289,8 +318,8 @@ export function shopStock(run) {
   const relics = shuffle(Object.keys(RELICS).filter(k => !run.relics.includes(k))).slice(0, 3);
   const cons = shuffle(Object.keys(CONSUMABLES)).slice(0, 3);
   run.shopStock = [
-    ...relics.map(k => ({ kind: 'relic', key: k, price: Math.round(RELICS[k].price * (1 + 0.25 * currentRound(run).act)), sold: false })),
-    ...cons.map(k => ({ kind: 'cons', key: k, price: Math.round(CONSUMABLES[k].price * (1 + 0.2 * currentRound(run).act)), sold: false })),
+    ...relics.map(k => ({ kind: 'relic', key: k, price: Math.round(RELICS[k].price * (1 + 0.25 * currentRound(run).act) * (1 + (tierMods(run).cost || 0))), sold: false })),
+    ...cons.map(k => ({ kind: 'cons', key: k, price: Math.round(CONSUMABLES[k].price * (1 + 0.2 * currentRound(run).act) * (1 + (tierMods(run).cost || 0))), sold: false })),
   ];
   return run.shopStock;
 }

@@ -23,8 +23,10 @@ function loadDae(dir) {
 }
 
 // Altura del suelo: la superficie horizontal con más área
-function floorLevel(obj) {
-  const buckets = new Map();
+// (y de paso el material de ese suelo y cuántas unidades del mundo ocupa una repetición de su textura)
+function floorLevel(obj, info = null) {
+  const buckets = new Map(), mats = new Map();
+  const ua = new THREE.Vector2(), ub = new THREE.Vector2();
   const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
   obj.updateMatrixWorld(true);
   obj.traverse(o => {
@@ -41,11 +43,70 @@ function floorLevel(obj) {
       if (area < 1e-6 || Math.abs(n.y) / (2 * area) < 0.95) continue;
       const y = Math.round((a.y + b.y + c.y) / 3);
       buckets.set(y, (buckets.get(y) || 0) + area);
+      if (info && o.geometry.attributes.uv) {
+        const gi = o.geometry.groups.find(g => i >= g.start && i < g.start + g.count);
+        const m = Array.isArray(o.material) ? o.material[gi?.materialIndex || 0] : o.material;
+        if (!m?.map) continue;
+        const e = (mats.get(m) || { y, area: 0, w: 0, u: 0 });
+        if (e.y === y) {
+          const uv = o.geometry.attributes.uv;
+          ua.fromBufferAttribute(uv, ia); ub.fromBufferAttribute(uv, ib);
+          const du = ua.distanceTo(ub);
+          if (du > 1e-4) { e.w += a.distanceTo(b); e.u += du; }
+          e.area += area;
+          mats.set(m, e);
+        }
+      }
     }
   });
   let best = 0, bestA = -1;
   for (const [y, ar] of buckets) if (ar > bestA) { bestA = ar; best = y; }
+  if (info) info.cands = [...mats].filter(([, e]) => e.y === best && e.u > 0).sort((a, b) => b[1].area - a[1].area);
   return best;
+}
+
+// El suelo "limpio" (cuando ya han cargado las texturas): se descartan las oscuras
+// (sombras pintadas) o con mucho contraste (tocones, bordes)
+async function pickFloor(info) {
+  const ready = () => info.cands.every(([m]) => m.map.image?.width);
+  for (let i = 0; i < 40 && !ready(); i++) await new Promise(r => setTimeout(r, 50));
+  const c = info.cands.find(([m]) => plainTexture(m.map));
+  if (c) { info.mat = c[0]; info.repeatWorld = c[1].w / c[1].u; }
+}
+
+function plainTexture(tex) {
+  const img = tex.image;
+  if (!img?.width) return false;
+  const cv = document.createElement('canvas');
+  const n0 = Math.min(64, img.width);
+  cv.width = cv.height = n0;
+  const g = cv.getContext('2d');
+  g.drawImage(img, 0, 0, n0, n0);
+  const d = g.getImageData(0, 0, n0, n0).data;
+  let sum = 0, sq = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 200) return false;
+    const l = (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) / 255;
+    sum += l; sq += l * l; n++;
+  }
+  const mean = sum / n, sd = Math.sqrt(Math.max(0, sq / n - mean * mean));
+  return mean > 0.22 && sd < 0.05;
+}
+
+// Plano grande con el mismo suelo del mapa, para que lo recortado no deje ver otra cosa
+function floorPlane(info, scale, size = 9000) {
+  const tex = info.mat.map.clone();
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const rep = size / (info.repeatWorld * scale);
+  tex.repeat.set(rep, rep);
+  tex.needsUpdate = true;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshLambertMaterial({ map: tex, color: info.mat.color || 0xffffff }));
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
 // Parchea un material para descartar lo que cae dentro de la arena y aplanar el lado de la cámara
@@ -82,8 +143,17 @@ export async function addMap(scene, act, W, H) {
   map.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(map);
   const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
-  const floor = floorLevel(map);
+  const info = {};
+  const floor = floorLevel(map, info);
   map.position.set(-center.x + cfg.offset[0] * size.x, -floor - 0.8, -center.z + cfg.offset[1] * size.z);
+  // bajo el mapa, su mismo suelo: los huecos y bordes se ven como hierba/tierra del propio mapa
+  if (cfg.floor === 'map') await pickFloor(info);
+  if (info.mat && cfg.floor === 'map') {
+    const fp = floorPlane(info, 1);
+    fp.position.y = -1.6;
+    scene.add(fp);
+  }
+  const ownFloorHidden = !!(info.mat && cfg.floor === 'map');
   map.updateMatrixWorld(true);
   // dentro de la arena: o todo fuera (hueco) o sólo lo que sobresale del suelo
   const hole = { rect: new THREE.Vector4(-W / 2, -H / 2, W / 2, H / 2), south: H / 2 - 10, floor: -0.8, inside: cfg.floor === 'map' ? 3.5 : -1e6 };
@@ -121,7 +191,7 @@ export async function addMap(scene, act, W, H) {
     sea.position.y = -14;
     scene.add(sea);
   }
-  return { bounds: mb, floor: cfg.floor };
+  return { bounds: mb, floor: cfg.floor, mapGround: ownFloorHidden };
 }
 
 // Rancho: Ruta 34 (la Guardería de HGSS). Devuelve la pradera donde pasean tus Pokémon.

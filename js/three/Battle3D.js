@@ -104,7 +104,8 @@ export class Battle3D {
     g.rotation.x = -Math.PI / 2;
     g.receiveShadow = true;
     // si el suelo es el del mapa, el nuestro queda debajo como respaldo
-    if (mapInfo?.floor === 'map') g.position.y = -2.5;
+    if (mapInfo?.mapGround) g.visible = false; // debajo ya está el suelo del propio mapa
+    else if (mapInfo?.floor === 'map') g.position.y = -2.5;
     scene.add(g);
     base.wrapS = base.wrapT = THREE.RepeatWrapping;
     const outer = 6000;
@@ -176,13 +177,13 @@ export class Battle3D {
     };
     if (u.side) {
       // contorno rojo: copia de la silueta detrás, un poco más grande
-      const omat = new THREE.SpriteMaterial({ map: tex, alphaTest: 0.4, fog: true, color: u.boss ? 0xff7a1a : 0xff2a2a });
+      const omat = new THREE.SpriteMaterial({ map: tex, alphaTest: 0.4, fog: true, color: u.boss ? 0xff7a1a : u.elite ? 0xffd21a : 0xff2a2a });
       omat.onBeforeCompile = sh => {
         sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n diffuseColor.rgb = diffuse;');
       };
       v.outline = new THREE.Sprite(omat);
       this.scene.add(v.outline);
-      v.ring = new THREE.Mesh(new THREE.RingGeometry(u.r * 1.2, u.r * 1.2 + (u.boss ? 6 : 4), 40), u.boss ? this.bossRingMat : this.ringMat);
+      v.ring = new THREE.Mesh(new THREE.RingGeometry(u.r * 1.2, u.r * 1.2 + (u.boss ? 6 : 4), 40), u.boss || u.elite ? this.bossRingMat : this.ringMat);
       v.ring.rotation.x = -Math.PI / 2;
       v.ring.scale.set(1, 1, 1);
       v.fill = new THREE.Mesh(new THREE.CircleGeometry(u.r * 1.2, 32), this.ringFill);
@@ -250,19 +251,73 @@ export class Battle3D {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     const speed = this.app.speed;
+    this.checkKillcam(dt);
+    // en la kill cam todo va a cámara lenta (como mucho a velocidad ×1)
+    const slow = this.killcam ? this.killcam.scale : 1;
+    const simSpeed = this.killcam ? Math.min(speed, 1) * slow : speed;
     if (this.introT > 0) this.introT -= dt;
-    else if (!this.ended && speed > 0) this.sim.update(dt * speed);
+    else if (!this.ended && simSpeed > 0) this.sim.update(dt * simSpeed);
     this.handleEvents();
     this.updateCamera(dt);
-    this.sync(dt * Math.max(1, speed), now / 1000);
+    const vdt = this.killcam ? dt * slow : dt * Math.max(1, speed);
+    this.sync(vdt, now / 1000);
     this.env.update(now / 1000);
     this.renderer.render(this.scene, this.camera);
-    this.drawOverlay(dt * Math.max(1, speed), now / 1000);
+    this.drawOverlay(vdt, now / 1000);
     this.app.onBattleTick(this.sim);
     if (this.sim.result && !this.ended) {
       this.ended = true;
-      setTimeout(() => this.app.onBattleEnd(this.sim), 1300);
+      const kc = this.killcam && this.sim.result === 'win';
+      if (kc) {
+        // último golpe: se queda un momento en cámara lenta y luego vuelve
+        this.killcam.dead = true;
+        this.flashT = 0.25; this.flashColor = '255,255,255';
+        this.shakeT = 0.3;
+        sfx('boom');
+        setTimeout(() => this.endKillcam(), 1500);
+      } else this.endKillcam();
+      setTimeout(() => this.app.onBattleEnd(this.sim), kc ? 2500 : 1300);
     }
+  }
+
+  // ---------- Kill cam: el último golpe de la ronda, de cerca y a cámara lenta ----------
+  checkKillcam(dt) {
+    const kc = this.killcam;
+    if (kc) {
+      kc.t += dt;
+      const u = kc.u;
+      this.camGoal.px = u.x - this.W / 2;
+      this.camGoal.pz = u.y - this.H / 2;
+      // por si el golpe final no llega: se suelta a los 3.5 s
+      if (!kc.dead && (kc.t > 4 || this.sim.enemies.filter(e => e.hp > 0).length > 1)) this.endKillcam();
+      return;
+    }
+    if (this.sim.result || this.introT > 0 || this.killcamDone || this.app.speed === 0) return;
+    const alive = this.sim.enemies.filter(e => e.hp > 0);
+    if (alive.length !== 1) return;
+    const e = alive[0];
+    // se activa cuando, al ritmo de daño que lleva, caerá en menos de ~0.8 s
+    const h = (this.hpHist ??= []);
+    h.push([this.sim.t, e.hp, e.id]);
+    while (h.length && (h[0][0] < this.sim.t - 1.2 || h[0][2] !== e.id)) h.shift();
+    if (h.length < 2 || this.sim.t - h[0][0] < 0.4) return;
+    const dps = (h[0][1] - e.hp) / (this.sim.t - h[0][0]);
+    if (dps <= 0 || e.hp / dps > 0.8) return;
+    this.killcamDone = true;
+    this.camBefore = { ...this.camGoal };
+    this.killcam = { u: e, t: 0, scale: 0.25, dead: false };
+    this.camGoal = { az: clamp(this.cam.az + (e.x > this.W / 2 ? -0.28 : 0.28), -0.5, 0.5), pitch: 0.55, zoom: e.boss ? 0.6 : 0.42, px: e.x - this.W / 2, pz: e.y - this.H / 2 };
+    this.root.classList.add('killcam');
+    document.body.classList.add('killcam');
+    sfx('whoosh');
+  }
+
+  endKillcam() {
+    if (!this.killcam) return;
+    this.killcam = null;
+    this.camGoal = this.camBefore || { az: 0, pitch: this.portrait ? 0.8 : 0.62, zoom: 0.92, px: 0, pz: 0 };
+    this.root.classList.remove('killcam');
+    document.body.classList.remove('killcam');
   }
 
   sync(dt, clock) {
@@ -370,7 +425,7 @@ export class Battle3D {
   }
 
   updateCamera(dt) {
-    const k = 1 - Math.pow(0.0005, dt);
+    const k = 1 - Math.pow(this.killcam ? 0.004 : 0.0005, dt);
     for (const key of ['az', 'pitch', 'zoom', 'px', 'pz']) this.cam[key] = lerp(this.cam[key], this.camGoal[key], k);
     let sx = 0, sz = 0;
     if (this.shakeT > 0) { this.shakeT -= dt; sx = (Math.random() - 0.5) * 10; sz = (Math.random() - 0.5) * 10; }
@@ -549,7 +604,7 @@ export class Battle3D {
         case 'flash': this.flashT = 0.3; this.flashColor = '160,255,160'; break;
         case 'sash': { const v = this.view(e.id); if (v) this.floatText(v.u, 20, '¡Aguanta!', '#ffffff', 12); break; }
         case 'charge': { const v = this.view(e.id); if (v) this.floatText(v.u, 34 * v.u.size, '¡Derribo!', '#ffd23a', 18); break; }
-        case 'enrage': this.app.feed('¡Los Pokémon salvajes se enfurecen! <b>Su ataque sube</b>', 'foe'); break;
+        case 'enrage': if (Math.round(e.level / 0.12) % 3 === 1) this.app.feed(`¡Los Pokémon salvajes se enfurecen! <b>Ataque +${Math.round(e.level * 100)}%</b>`, 'foe'); break;
         case 'thrown': sfx('throw'); break;
         case 'ko': sfx('allyKo'); this.koCount++; break;
         case 'die': {
@@ -747,6 +802,8 @@ export class Battle3D {
   destroy() {
     this.destroyed = true;
     cancelAnimationFrame(this.raf);
+    this.root.classList.remove('killcam');
+    document.body.classList.remove('killcam');
     window.removeEventListener('resize', this.onResize);
     if (this.renderer) {
       this.scene.traverse(o => { if (o.material) { o.material.map?.dispose?.(); o.material.dispose?.(); } o.geometry?.dispose?.(); });

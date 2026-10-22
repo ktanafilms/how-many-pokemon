@@ -26,7 +26,7 @@ export function renderRanch(app) {
     <div class="topbar panel">
       <div class="where">
         <div class="round">Ronda ${run.round + 1}<span> / ${R.TOTAL_ROUNDS}</span></div>
-        <div class="act">Acto ${r.act + 1} · ${act.name}</div>
+        <div class="act">Acto ${r.act + 1} · ${act.name}${run.tier ? ` · <span class="alpha">${"★".repeat(run.tier + 1)} ${R.TIERS[run.tier].name}</span>` : ""}</div>
       </div>
       <div class="spacer"></div>
       <div class="stat money-stat" ${tip('Pokédólares: se ganan al vencer y sirven para reclutar Pokémon y comprar objetos.')}><span class="money">₽<b data-money>${Math.round(app.shownMoney ?? run.money)}</b></span></div>
@@ -191,10 +191,12 @@ export function foeTip(run, k) {
 
 function foesPreview(run) {
   const counts = {};
-  for (const k of run.enemies) counts[k] = (counts[k] || 0) + 1;
+  const alphas = {};
+  run.enemies.forEach((k, i) => { counts[k] = (counts[k] || 0) + 1; if (run.elite?.[i]) alphas[k] = (alphas[k] || 0) + 1; });
   return Object.entries(counts).map(([k, n]) => {
     const e = ENEMIES[k];
-    return `<div class="foe ${e.boss ? 'boss' : ''}" ${tip(foeTip(run, k))}>${img(e.dex)}<div><b>${e.name} ×${n}</b><div>${types(e.types)}</div></div></div>`;
+    const a = alphas[k] ? `<span class="alpha" title="Pokémon Alfa: más grande, ×3 PS, más ataque y con Furia">★${alphas[k]} Alfa</span>` : '';
+    return `<div class="foe ${e.boss ? 'boss' : ''} ${a ? 'has-alpha' : ''}" ${tip(foeTip(run, k))}>${img(e.dex)}<div><b>${e.name} ×${n}</b> ${a}<div>${types(e.types)}</div></div></div>`;
   }).join('');
 }
 

@@ -137,8 +137,8 @@ class App {
   newGame() {
     this.clearUI();
     playMusic('act0');
-    EV.starterModal(k => {
-      this.run = R.newRun(k);
+    EV.starterModal((k, tier) => {
+      this.run = R.newRun(k, tier);
       this.run.tutorial = true;
       R.save(this.run);
       this.ranchEnter = true;

@@ -509,3 +509,21 @@ small { font-size: 0.85em; }
   .location-sign { font-size: 20px; top: 70px; }
   .title-screen .sub { font-size: 16px; }
 }
+
+/* Ligas (dificultad) en la pantalla inicial */
+.tiers { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 4px 0 2px; }
+.tier { font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 8px; border: 2px solid #5a6a8a; background: #eef2f8; color: #34405a; cursor: pointer; }
+.tier.on { background: linear-gradient(#ffe36a, #f2b72c); border-color: #a8761a; color: #4a3008; box-shadow: 0 2px 0 #a8761a; }
+.tier:disabled { opacity: 0.4; cursor: not-allowed; }
+.tier-desc { text-align: center; font-size: 13px; color: #5a6478; margin: 2px 0 8px; }
+
+/* Kill cam: bandas de cine y viñeta durante el último golpe */
+#stage3d::before, #stage3d::after { content: ''; position: absolute; left: 0; right: 0; height: 11vh; background: #000; z-index: 2; pointer-events: none; transform: scaleY(0); transition: transform .35s ease; }
+#stage3d::before { top: 0; transform-origin: top; }
+#stage3d::after { bottom: 0; transform-origin: bottom; }
+#stage3d.killcam::before, #stage3d.killcam::after { transform: scaleY(1); }
+#stage3d.killcam canvas.overlay { box-shadow: inset 0 0 18vmin rgba(0,0,0,.65); }
+.hud-top, .hud-bottom, .feed { transition: opacity .3s; }
+body.killcam .hud-top, body.killcam .hud-bottom, body.killcam .feed, body.killcam .cam-hint { opacity: 0; pointer-events: none; }
+.alpha { display: inline-block; font-size: 11px; padding: 0 5px; border-radius: 6px; background: linear-gradient(#ffe36a, #f2b72c); color: #5a3a00; border: 1px solid #a8761a; vertical-align: middle; }
+.foe.has-alpha { box-shadow: 0 0 0 2px #f2b72c inset; }
