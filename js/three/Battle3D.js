@@ -7,6 +7,7 @@ import { TRAIT_INFO } from '../data/species.js';
 import { MANIFEST, animDuration } from '../scenes/anims.js';
 import { sfx, cry } from '../audio.js';
 import { buildEnvironment } from './env.js';
+import { addMap, MAPS } from './maps.js';
 
 const ALLY_SCALE = 1.45;
 const loader = new THREE.TextureLoader();
@@ -91,19 +92,26 @@ export class Battle3D {
     this.camera = new THREE.PerspectiveCamera(40, 1, 10, 8000);
     const W = this.W, H = this.H;
     // cielo, luces, árboles/rocas 3D, hierba y agua del acto
-    this.env = buildEnvironment(scene, this.act, W, H, data, this.portrait);
+    const realMap = !!MAPS[this.act];
+    this.env = buildEnvironment(scene, this.act, W, H, data, this.portrait, { realMap });
+    let mapInfo = null;
+    if (realMap) {
+      try { mapInfo = await addMap(scene, this.act, W, H); } catch (e) { console.warn('mapa 3D no disponible', e); }
+    }
 
     // --- suelo: la arena y alrededor el mismo suelo repetido (reciben sombras)
     const g = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshLambertMaterial({ map: ground }));
     g.rotation.x = -Math.PI / 2;
     g.receiveShadow = true;
+    // si el suelo es el del mapa, el nuestro queda debajo como respaldo
+    if (mapInfo?.floor === 'map') g.position.y = -2.5;
     scene.add(g);
     base.wrapS = base.wrapT = THREE.RepeatWrapping;
     const outer = 6000;
     base.repeat.set(outer / 32, outer / 32);
     const og = new THREE.Mesh(new THREE.PlaneGeometry(outer, outer), new THREE.MeshLambertMaterial({ map: base, color: 0xd0d0d0 }));
     og.rotation.x = -Math.PI / 2;
-    og.position.y = -0.6;
+    og.position.y = realMap ? -40 : -0.6;
     og.receiveShadow = true;
     scene.add(og);
 

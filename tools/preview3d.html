@@ -1,0 +1,40 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Visor de modelos</title>
+<style>html,body{margin:0;height:100%;background:#203040;color:#fff;font:14px monospace}#info{position:fixed;left:8px;top:8px;white-space:pre}</style></head>
+<body><div id="info">cargando…</div>
+<script type="module">
+// Visor para revisar modelos DAE/OBJ: tools/preview3d.html?m=tools/models/tree/Tree%20Map.dae&pitch=0.6
+import * as THREE from '../lib/three.module.min.js';
+import { ColladaLoader } from '../lib/three-addons/ColladaLoader.js';
+import { OBJLoader } from '../lib/three-addons/OBJLoader.js';
+import { MTLLoader } from '../lib/three-addons/MTLLoader.js';
+const q = new URLSearchParams(location.search);
+const url = q.get('m');
+const r = new THREE.WebGLRenderer({ antialias: true });
+r.setSize(innerWidth, innerHeight); r.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#87b8e0');
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
+const cam = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.01, 100000);
+async function load() {
+  if (url.endsWith('.obj')) {
+    const base = url.slice(0, url.lastIndexOf('/') + 1);
+    const mtl = await new MTLLoader().setPath(base).loadAsync(url.split('/').pop().replace('.obj', '.mtl')).catch(() => null);
+    const l = new OBJLoader(); if (mtl) { mtl.preload(); l.setMaterials(mtl); }
+    return l.loadAsync(url);
+  }
+  return (await new ColladaLoader().loadAsync(url)).scene;
+}
+const obj = await load();
+obj.traverse(o => { if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; ms.forEach(m => { if (m.map) { m.map.magFilter = THREE.NearestFilter; m.map.colorSpace = THREE.SRGBColorSpace; } m.alphaTest = 0.5; m.side = THREE.DoubleSide; }); } });
+scene.add(obj);
+const box = new THREE.Box3().setFromObject(obj), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+const d = Math.max(size.x, size.y, size.z) * 1.1 * (+q.get('dist') || 1), pitch = +(q.get('pitch') || 0.7), az = +(q.get('az') || 0);
+cam.position.set(c.x + Math.sin(az) * Math.cos(pitch) * d, c.y + Math.sin(pitch) * d, c.z + Math.cos(az) * Math.cos(pitch) * d);
+cam.lookAt(c);
+let meshes = 0, tris = 0; obj.traverse(o => { if (o.isMesh) { meshes++; tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; } });
+document.getElementById('info').textContent = `${url}\ntamaño ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}\nmallas ${meshes}  triángulos ${tris | 0}`;
+const tick = () => { r.render(scene, cam); requestAnimationFrame(tick); };
+tick();
+setTimeout(() => { window.ready = true; }, 2500);
+</script></body></html>

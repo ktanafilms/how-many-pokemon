@@ -23,7 +23,7 @@ const copy = (rel) => {
 };
 
 for (const f of ['index.html', 'favicon.png', 'css', 'js', 'lib', 'CREDITS.md',
-  'assets/fonts', 'assets/ui', 'assets/arenas3d', 'assets/items', 'assets/badges', 'assets/npc', 'assets/arenas',
+  'assets/fonts', 'assets/ui', 'assets/arenas3d', 'assets/maps3d', 'assets/items', 'assets/badges', 'assets/npc', 'assets/arenas',
   'assets/audio/music', 'assets/audio/jingles', 'assets/audio/sfx']) copy(f);
 
 // Manifest recortado + sólo las hojas, retratos y gritos que se usan

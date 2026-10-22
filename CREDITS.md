@@ -8,6 +8,9 @@ Pokémon © Nintendo / Creatures / GAME FREAK. Proyecto fan sin ánimo de lucro.
 Tileset de Pokémon HeartGold/SoulSilver adaptado por **SirMaIo** (https://www.deviantart.com/sirmaio/art/HGSS-for-RMXP-837574941),
 reescalado por **jls-dchrn** (https://github.com/jls-dchrn/HGSS_pokemon_tileset). Escenarios compuestos con `tools/build_arenas.py`.
 
+## Mapas 3D (combate en 2.5D)
+Modelos 3D de Pokémon HeartGold/SoulSilver (Viridian Forest, Mt. Moon, Cinnabar Island, Lavender Town, Safari Zone, Cerulean Cave y el bloque de árboles), extraídos y publicados por la comunidad en The Models Resource (https://models.spriters-resource.com/ds_dsi/pokemonheartgoldsoulsilver/), entre otros por Kuramapika1. Fuentes originales en `tools/models/`.
+
 ## Torre Pokémon
 Tiles de la Torre Pokémon de FireRed reconstruidos desde el desensamblado **pret/pokefirered** (https://github.com/pret/pokefirered) con `tools/frlg_tower.py`.
 

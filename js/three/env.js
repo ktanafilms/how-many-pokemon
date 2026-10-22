@@ -122,8 +122,10 @@ class Instancer {
   }
 }
 
-export function buildEnvironment(scene, act, W, H, data, portrait) {
-  const S = STYLES[act] || STYLES[0];
+export function buildEnvironment(scene, act, W, H, data, portrait, { realMap = false } = {}) {
+  const S0 = STYLES[act] || STYLES[0];
+  // con un mapa real de HGSS alrededor no hacen falta árboles, rocas ni muros generados
+  const S = realMap ? { ...S0, flora: [], bushes: false, crystals: null, walls: false, ocean: false, tufts: 0 } : S0;
   const ramp = toonRamp();
   const toon = (color, extra = {}) => new THREE.MeshToonMaterial({ color, gradientMap: ramp, ...extra });
   const rng = mulberry(act * 9973 + (portrait ? 7 : 1));
