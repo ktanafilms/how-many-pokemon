@@ -101,6 +101,25 @@ export function shopModal(app, done) {
   });
 }
 
+export function challengeModal(app, done) {
+  const run = app.run;
+  const body = `
+    <div class="lead">Los rivales de esta ronda serán <b>muchos más</b> y con varios <span class="alpha">★ Alfa</span>. Si ganas: <b>eliges un objeto</b> y te llevas un <b>50% más de ₽</b>.</div>
+    <div class="actions"><button class="btn red" data-yes>¡Acepto el reto!</button><button class="btn blue" data-close>Mejor no</button></div>`;
+  const m = scene('red', '… … … (Rojo te mira fijamente. Parece que quiere ver de qué es capaz tu manada.)', body, { onClose: done });
+  m.addEventListener('click', e => {
+    if (e.target.closest('[data-yes]')) {
+      sfx('select');
+      R.acceptChallenge(run);
+      cry(25, { vol: 0.5 });
+      app.toast('¡Reto aceptado! Prepárate bien antes de luchar.');
+      m.close();
+      return;
+    }
+    if (e.target.closest('[data-close]')) { sfx('back'); m.close(); }
+  });
+}
+
 export function vitaminModal(app, done) {
   const run = app.run;
   playMusic('shop');

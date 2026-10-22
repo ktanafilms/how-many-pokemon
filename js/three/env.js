@@ -29,7 +29,7 @@ const STYLES = [
     tufts: 520, grassColor: ['#8cc048', '#b8e070', '#567a28'], bushes: true,
   },
   { // Cueva Celeste
-    sky: '#0c1428', fog: '#121c38', ground: 0xc8d4ff, sun: 0.6, amb: 0.8, hemi: ['#6a8ad0', '#141828'],
+    sky: '#1a1226', fog: '#241830', ground: 0xe0d4ff, sun: 0.9, amb: 1.25, hemi: ['#b8a8e0', '#30243a'],
     flora: [['rock', 0.55], ['stal', 0.45]], rock: ['#7a5a48', '#9a7058', '#5a4034'], crystals: ['#7ad8ff', '#b08aff'],
     tufts: 0,
   },

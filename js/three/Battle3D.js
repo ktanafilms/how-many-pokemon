@@ -114,7 +114,16 @@ export class Battle3D {
     og.rotation.x = -Math.PI / 2;
     og.position.y = realMap ? -40 : -0.6;
     og.receiveShadow = true;
-    scene.add(og);
+    // isla: una franja de arena alrededor de la arena y luego el mar
+    if (mapInfo?.island) {
+      og.geometry.dispose();
+      // (al norte no: allí la arena ya acaba en la orilla)
+      og.geometry = new THREE.PlaneGeometry(W + 520, H + 190);
+      base.repeat.set((W + 520) / 32, (H + 190) / 32);
+      og.position.set(0, -0.6, 125);
+      og.material.color.set(0xffffff);
+    }
+    if (!mapInfo?.mapGround) scene.add(og); // con suelo del mapa, éste ya se extiende hasta el horizonte
 
     // --- objetos de pie (árboles, rocas, lápidas…) como sprites anclados al suelo
     const AW = props.image.width, AH = props.image.height;
@@ -124,7 +133,8 @@ export class Battle3D {
       t.offset.set(x / AW, 1 - (y + h) / AH);
       return new THREE.SpriteMaterial({ map: t, alphaTest: 0.5, fog: true });
     });
-    for (const [s, x, y] of data.props) {
+    // con mapa real de HGSS sobran los adornos 2D de la arena (árboles y rocas planos)
+    for (const [s, x, y] of realMap ? [] : data.props) {
       // los de la franja de abajo taparían la arena con la cámara inclinada
       if (y > H - 24 && x > 0 && x < W) continue;
       const [, , w, h] = data.sprites[s];
@@ -307,6 +317,9 @@ export class Battle3D {
     this.camBefore = { ...this.camGoal };
     this.killcam = { u: e, t: 0, scale: 0.25, dead: false };
     this.camGoal = { az: clamp(this.cam.az + (e.x > this.W / 2 ? -0.28 : 0.28), -0.5, 0.5), pitch: 0.55, zoom: e.boss ? 0.6 : 0.42, px: e.x - this.W / 2, pz: e.y - this.H / 2 };
+    // la víctima se dibuja por encima de la multitud para que se vea bien
+    const v = this.view(e.id);
+    if (v) [v.outline, v.spr].forEach((sp, i) => { if (sp) { sp.renderOrder = 9 + i; sp.material.depthTest = false; } });
     this.root.classList.add('killcam');
     document.body.classList.add('killcam');
     sfx('whoosh');
@@ -354,6 +367,8 @@ export class Battle3D {
       }
       const x = u.x - W2, z = u.y - H2;
       v.spr.position.set(x, u.z + v.dropY, z);
+      // al ganar, tus Pokémon dan saltitos de alegría (como los Dudes de HMD)
+      if (this.sim.result === 'win' && !u.side && u.state !== 'ko') v.spr.position.y += Math.abs(Math.sin(clock * 7 + u.id * 1.7)) * 12;
       // dirección relativa a la cámara
       const moving = Math.abs(u.vx) + Math.abs(u.vy) > 1;
       const ang = moving ? Math.atan2(u.vy, u.vx) : u.target ? u.facing : null;
@@ -486,15 +501,15 @@ export class Battle3D {
       if (pointers.size >= 2 && pinch) {
         const [a, b] = [...pointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
-        g.zoom = clamp(pinch.zoom * pinch.d / d, 0.42, 1.35);
+        g.zoom = clamp(pinch.zoom * pinch.d / d, 0.42, 1.15);
         const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
         this.pan(cx - pinch.cx, cy - pinch.cy);
         pinch.cx = cx; pinch.cy = cy;
         return;
       }
       if (start && (start.button === 2 || start.shift)) { this.pan(dx, dy); return; }
-      g.az = clamp(g.az - dx * 0.004, -0.5, 0.5);
-      g.pitch = clamp(g.pitch + dy * 0.003, 0.32, 1.25);
+      g.az = clamp(g.az - dx * 0.004, -0.32, 0.32);
+      g.pitch = clamp(g.pitch + dy * 0.003, 0.5, 1.2);
     });
     const up = e => {
       pointers.delete(e.pointerId);
@@ -509,7 +524,7 @@ export class Battle3D {
     el.addEventListener('pointercancel', up);
     el.addEventListener('wheel', e => {
       e.preventDefault();
-      this.camGoal.zoom = clamp(this.camGoal.zoom * Math.exp(e.deltaY * 0.0012), 0.42, 1.35);
+      this.camGoal.zoom = clamp(this.camGoal.zoom * Math.exp(e.deltaY * 0.0012), 0.42, 1.15);
     }, { passive: false });
     el.addEventListener('dblclick', () => this.resetCamera());
   }
@@ -612,6 +627,10 @@ export class Battle3D {
           if (!v) break;
           sfx('faint');
           cry(v.u.dex, { rate: 0.75, vol: v.u.boss ? 0.7 : 0.3 });
+          // ¡puf! estrellitas y un aro al debilitarse
+          const n = v.u.boss ? 16 : v.u.elite ? 10 : 6;
+          this.addFx('poof', v.u.boss ? 1.1 : 0.6, { x: v.u.x, y: v.u.y, r: v.u.r * 1.8, h: 18 * v.u.size, parts: Array.from({ length: n }, (_, i) => ({ a: (i / n) * Math.PI * 2 + Math.random() * 0.5, sp: 0.6 + Math.random() * 0.6 })), color: v.u.boss ? '#ffb43a' : v.u.elite ? '#ffd21a' : '#ffffff' });
+          if (v.u.elite) this.floatText(v.u, 40 * v.u.size, '¡Alfa derrotado!', '#ffd21a', 16);
           this.feedLine(`¡${v.u.boss ? '' : 'El '}${v.u.name}${v.u.boss ? '' : ' salvaje'} se ha debilitado!`, 'foe', 'die' + (v.u.boss ? 'b' : ''), v.u.boss ? 0 : 700);
           break;
         }
@@ -734,6 +753,17 @@ export class Battle3D {
         break;
       }
       case 'target': { const g = this.ground(f.x, f.y, f.r * (1 - 0.3 * k)); c.strokeStyle = f.color; c.globalAlpha = 0.5 + 0.4 * k; c.lineWidth = 2; ellipse(c, g); c.stroke(); c.globalAlpha = 1; break; }
+      case 'poof': {
+        const g = this.ground(f.x, f.y, f.r * (0.3 + 0.9 * k));
+        c.globalAlpha = 0.9 * (1 - k); c.strokeStyle = f.color; c.lineWidth = 3; ellipse(c, g); c.stroke();
+        const e = 1 - (1 - k) * (1 - k);
+        for (const p of f.parts) {
+          const s = this.toScreen(f.x + Math.cos(p.a) * f.r * 1.4 * e * p.sp, f.y + Math.sin(p.a) * f.r * 1.4 * e * p.sp, f.h + Math.sin(k * Math.PI) * 30 * p.sp);
+          star(c, s.x, s.y, Math.max(2, 6 * s.s * (1 - k * 0.6)), f.color);
+        }
+        c.globalAlpha = 1;
+        break;
+      }
       case 'boom': {
         const g = this.ground(f.x, f.y, f.r * (0.4 + 0.6 * k));
         c.globalAlpha = 0.5 * (1 - k); c.fillStyle = f.color; ellipse(c, g); c.fill();
@@ -816,6 +846,17 @@ export class Battle3D {
 }
 
 // ---------- utilidades ----------
+function star(c, x, y, r, color) {
+  c.fillStyle = color;
+  c.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.45 : r;
+    c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  c.closePath();
+  c.fill();
+}
+
 function radial(inner, outer) {
   const cv = document.createElement('canvas');
   cv.width = cv.height = 64;

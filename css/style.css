@@ -527,3 +527,10 @@ small { font-size: 0.85em; }
 body.killcam .hud-top, body.killcam .hud-bottom, body.killcam .feed, body.killcam .cam-hint { opacity: 0; pointer-events: none; }
 .alpha { display: inline-block; font-size: 11px; padding: 0 5px; border-radius: 6px; background: linear-gradient(#ffe36a, #f2b72c); color: #5a3a00; border: 1px solid #a8761a; vertical-align: middle; }
 .foe.has-alpha { box-shadow: 0 0 0 2px #f2b72c inset; }
+.wipe-ball { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; animation: wipeball .8s linear infinite; z-index: 1; }
+.wipe-ball img { width: 100%; height: 100%; }
+.wipe.out .wipe-ball { display: none; }
+@keyframes wipeball { to { transform: rotate(360deg); } }
+.bossbar > .trail { position: absolute; left: 34px; top: 0; bottom: 0; width: calc(100% - 34px); max-width: calc(100% - 34px); background: #ffe9a8; transition: width .7s .35s ease-out; }
+.bossbar.mid > div { background: linear-gradient(180deg, #fff09a 0 40%, #f0c020 45%); }
+.bossbar.low > div { background: linear-gradient(180deg, #ffb0a0 0 40%, #f05038 45%); }

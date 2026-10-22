@@ -16,6 +16,7 @@ export const ROUND_INFO = {
   objeto:    { name: 'Objeto', img: 'rare-candy', desc: 'Al ganar, elige un objeto poderoso.' },
   vitaminas: { name: 'Vitaminas', img: 'protein', desc: 'Llega un vendedor de vitaminas: mejora permanente para una especie.' },
   guarderia: { name: 'Guardería', img: 'mystery-egg', desc: 'Deja Rattatas en la Guardería y volverán… DIFERENTES.' },
+  reto:      { name: 'Reto de Rojo', img: 'ultra-ball', desc: 'Rojo te propone un combate extra duro. Si aceptas y ganas: un objeto y ₽ de más.' },
   jefe:      { name: 'Jefe', img: 'master-ball', desc: 'Un Pokémon gigante. Al ganar consigues una Medalla y el Centro Pokémon cura a todo tu equipo.' },
 };
 
@@ -67,7 +68,7 @@ function buildMap() {
   const map = [];
   for (let a = 0; a < ACTS.length; a++) {
     const mid = a === 0 ? 'tienda' : pick(['tienda', 'normal', 'guarderia']);
-    const late = pick(a === 0 ? ['vitaminas', 'guarderia'] : ['vitaminas', 'guarderia', 'tienda', 'vitaminas']);
+    const late = pick(a === 0 ? ['vitaminas', 'guarderia'] : ['vitaminas', 'guarderia', 'tienda', 'reto']);
     const types = ['normal', 'cartel', mid, 'objeto', late, 'jefe'];
     if (a > 0 && !types.includes('tienda')) types[0] = 'tienda';
     for (const t of types) map.push({ type: t, act: a });
@@ -179,6 +180,7 @@ export function prepareRound(run) {
   run.shopStock = null;
   const r = currentRound(run);
   if (!r) return;
+  run.challenge = false;
   run.enemies = generateEnemies(run.round, r, tierMods(run));
   // Pokémon Alfa: más grandes, más duros y con un rasgo extra
   const alpha = r.type === 'jefe' || r.act === 0 ? 0 : 0.03 + 0.025 * r.act + (tierMods(run).alpha || 0);
@@ -289,7 +291,7 @@ export function applyBattle(run, battle) {
   const killValue = run.enemies.reduce((s, k, i) => s + (ENEMIES[k].cost || 10) * (run.elite?.[i] ? 3 : 1), 0);
   const persian = (run.spec.meowth?.stage || 0) >= 1;
   res.payday = battle.stats.meowth ? battle.stats.meowth.n * (persian ? 7 : 4) : 0;
-  res.money = Math.round((18 + 7 * (run.round + 1) + killValue * 1.4) * (1 + (g.money || 0))) + res.payday;
+  res.money = Math.round((18 + 7 * (run.round + 1) + killValue * 1.4) * (1 + (g.money || 0)) * (run.challenge ? 1.5 : 1)) + res.payday;
   run.money += res.money;
   run.lastResult = res;
   return res;
@@ -349,6 +351,15 @@ export function relicOptions(run) {
 }
 export function badgeOptions(run) {
   return shuffle(Object.keys(BADGES).filter(k => !run.badges.includes(k))).slice(0, 3);
+}
+
+// Reto de Rojo (el Promotor de HMD): rivales mucho más duros, con varios Alfa
+export function acceptChallenge(run) {
+  const r = currentRound(run);
+  run.challenge = true;
+  const extra = generateEnemies(run.round, r, { foes: 0.6 });
+  run.enemies = [...run.enemies, ...extra.slice(0, Math.ceil(extra.length * 0.6))];
+  run.elite = run.enemies.map((_, i) => run.elite?.[i] || Math.random() < 0.18);
 }
 
 export function vitaminOffer(run) {

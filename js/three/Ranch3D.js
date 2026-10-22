@@ -135,7 +135,9 @@ export class Ranch3D {
     sh.rotation.x = -Math.PI / 2;
     sh.scale.set(18, 9, 1);
     this.scene.add(spr, sh);
-    const x = rnd(Y.x0, Y.x1), z = rnd(Y.z0, Y.z1);
+    const Rm = Y.roam;
+    let x = rnd(Rm.x0, Rm.x1), z = rnd(Rm.z0, Rm.z1);
+    for (let i = 0; i < 60 && !Y.walk(x, z); i++) { x = rnd(Rm.x0, Rm.x1); z = rnd(Rm.z0, Rm.z1); }
     const m = { ...w, spr, sh, mat, tex, m: MANIFEST[w.dex], x, z, tx: x, tz: z, wait: Math.random() * 3, row: 0, anim: null, frame: 0, ft: 0, drop: animateNew ? 420 : 0, vy: 0, hop: 0 };
     m.sheetW = sheet.image.width; m.sheetH = sheet.image.height;
     this.setAnim(m, 'Idle');
@@ -190,8 +192,11 @@ export class Ranch3D {
           this.setAnim(m, 'Idle');
           if (m.wait <= 0) {
             m.wait = rnd(1, 5);
-            m.tx = Math.max(Y.x0, Math.min(Y.x1, m.x + rnd(-120, 120)));
-            m.tz = Math.max(Y.z0, Math.min(Y.z1, m.z + rnd(-90, 90)));
+            for (let i = 0; i < 8; i++) {
+              const tx = Math.max(Y.roam.x0, Math.min(Y.roam.x1, m.x + rnd(-120, 120))), tz = Math.max(Y.roam.z0, Math.min(Y.roam.z1, m.z + rnd(-90, 90)));
+              // sólo destinos con camino libre (se comprueba la mitad y el final)
+              if (Y.walk(tx, tz) && Y.walk((tx + m.x) / 2, (tz + m.z) / 2)) { m.tx = tx; m.tz = tz; break; }
+            }
             if (Math.random() < 0.15) m.hop = 0.35; // saltito de alegría
           }
         }

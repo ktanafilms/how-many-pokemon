@@ -9,6 +9,7 @@ export const NPCS = {
   chef: { img: 'chef', name: 'Chef Vitaminas' },
   nurse: { img: 'nurse', name: 'Enfermera Joy' },
   police: { img: 'policeman', name: 'Agente Mártinez' },
+  red: { img: 'red', name: 'Rojo' },
   // guardianes de cada acto (presentan al jefe)
   falkner: { img: 'falkner', name: 'Pegaso' },
   brock: { img: 'brock', name: 'Brock' },

@@ -15,6 +15,7 @@ import { el, ui, tip } from './ui/html.js';
 import { ARENA } from './game/sim.js';
 import { Battle3D } from './three/Battle3D.js';
 import { Ranch3D } from './three/Ranch3D.js';
+import { preloadMap } from './three/maps.js';
 import { playMusic, jingle, sfx, cry, volumes, setMusic, setSfx } from './audio.js';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -159,6 +160,8 @@ class App {
     this.shownMoney = run.money;
     this.switchScene('Ranch', { bg: 'ranch', orient: this.orient, team: this.teamEntries() });
     this.refreshRanch(false);
+    // mientras estás en el rancho se va cargando el escenario del próximo combate
+    if (this.use3d) setTimeout(() => preloadMap(r.act), 1500);
     if (this.lastAct !== r.act) { this.lastAct = r.act; this.locationSign(ACTS[r.act].name, `Acto ${r.act + 1}`); }
     if (run.returned?.length) {
       jingle('egg');
@@ -189,6 +192,7 @@ class App {
       if (r.type === 'tienda') EV.shopModal(this, done);
       else if (r.type === 'vitaminas') EV.vitaminModal(this, done);
       else if (r.type === 'guarderia') EV.daycareModal(this, done);
+      else if (r.type === 'reto') EV.challengeModal(this, done);
       else run.eventDone = true;
     }
   }
@@ -240,12 +244,14 @@ class App {
     const boss = setup.enemies.find(e => e.boss);
     playMusic(boss ? (r.act === ACTS.length - 1 ? 'final' : 'boss') : 'battle');
     sfx('whoosh');
-    this.wipe(() => {
+    this.wipe(async () => {
       this.clearUI();
       if (this.use3d) {
         for (const k of ['Ranch', 'Battle']) if (this.game.scene.isActive(k)) this.game.scene.stop(k);
         if (this.ranch3d) { this.ranch3d.destroy(); this.ranch3d = null; }
         this.b3d = new Battle3D(this, setup, r.act);
+        // la cortina no se abre hasta que el escenario está listo (nada de pantalla negra)
+        await this.b3d.ready;
         this.camHint();
       } else this.switchScene('Battle', { setup, act: r.act, app: this });
       this.renderHud();
@@ -258,8 +264,14 @@ class App {
   wipe(mid) {
     const w = el(`<div class="wipe">${Array.from({ length: 8 }, (_, i) => `<i style="--i:${i}"></i>`).join('')}</div>`);
     document.body.appendChild(w);
-    setTimeout(() => { mid(); w.classList.add('out'); }, 520);
-    setTimeout(() => w.remove(), 1100);
+    // si lo de en medio tarda, aparece una Poké Ball girando
+    const spin = setTimeout(() => w.appendChild(el('<div class="wipe-ball"><img class="px" src="assets/items/poke-ball.png" alt=""></div>')), 900);
+    setTimeout(async () => {
+      try { await mid(); } catch (e) { console.error(e); }
+      clearTimeout(spin);
+      w.classList.add('out');
+      setTimeout(() => w.remove(), 600);
+    }, 520);
   }
 
   renderHud() {
@@ -270,7 +282,7 @@ class App {
       slots.push(k ? `<div class="slot ${this.armed === i ? 'armed' : ''}" data-use="${i}" ${tip(`<h4>${icon(CONSUMABLES[k])} ${CONSUMABLES[k].name}</h4>${CONSUMABLES[k].desc}`)}>${icon(CONSUMABLES[k])}</div>` : '<div class="slot empty"></div>');
     }
     const hud = el(`<div id="hud">
-      <div class="hud-top panel"><div class="title-font" data-title></div><div class="bossbar" data-bar><div></div><span data-pct></span></div>
+      <div class="hud-top panel"><div class="title-font" data-title></div><div class="bossbar" data-bar><i class="trail"></i><div></div><span data-pct></span></div>
         <div class="foe-chips">${this.hudFoes.map(f => `<div class="foe-chip ${f.boss ? 'boss' : ''}" data-foe="${f.key}" ${tip(`<h4>${f.name}</h4>${f.types.map(typeBadge).join('')}`)}><img class="px" src="${portrait(f.dex)}" alt=""><b data-n>${f.n}</b></div>`).join('')}</div>
       </div>
       <div class="feed" data-feed></div>
@@ -377,7 +389,11 @@ class App {
       hud.querySelector('[data-title]').textContent = `Pokémon salvajes: quedan ${left.length}`;
       p = cur / tot;
     }
-    bar.firstElementChild.style.width = `${p * 100}%`;
+    // barra verde/amarilla/roja como en los juegos, con estela del daño reciente
+    bar.querySelector('div').style.width = `${p * 100}%`;
+    bar.querySelector('.trail').style.width = `${p * 100}%`;
+    bar.classList.toggle('mid', p <= 0.5 && p > 0.2);
+    bar.classList.toggle('low', p <= 0.2);
     hud.querySelector('[data-pct]').textContent = `${Math.ceil(p * 100)}%`;
   }
 
@@ -398,7 +414,7 @@ class App {
     const steps = [
       done => EV.resultsModal(this, res, done),
       ...(r.type === 'cartel' ? [done => EV.cartelModal(this, done)] : []),
-      ...(r.type === 'objeto' ? [done => EV.relicModal(this, done)] : []),
+      ...(r.type === 'objeto' || this.run.challenge ? [done => EV.relicModal(this, done)] : []),
       ...(r.type === 'jefe' ? [done => EV.badgeModal(this, done)] : []),
       ...res.evolutions.map(evo => done => EV.evolutionModal(this, evo, done)),
     ];
@@ -408,7 +424,7 @@ class App {
       R.advanceRound(this.run);
       if (this.run.won) { R.clearSave(); playMusic('halloffame'); EV.endScreen(this, true); return; }
       R.save(this.run);
-      this.wipe(() => this.goRanch());
+      this.wipe(() => { this.goRanch(); return this.ranch3d?.ready; });
     };
     next();
   }
