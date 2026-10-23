@@ -1,6 +1,7 @@
 // Estado de la partida: equipo, dinero, mapa de rondas, economía y guardado.
 import { PLAYER, ENEMIES, ACTS, ROUNDS_PER_ACT, STAGE_MULT } from '../data/species.js';
 import { RELICS, BADGES, VITAMINS, CONSUMABLES, MAX_CONSUMABLES } from '../data/items.js';
+import { withSeed, hashStr } from './meta.js';
 
 const SAVE_KEY = 'how-many-pokemon-save-v1';
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -39,10 +40,11 @@ export function unlockTier(t) {
 }
 export const tierMods = run => TIERS[run.tier || 0].mods;
 
-export function newRun(starter, tier = 0) {
+export function newRun(starter, tier = 0, daily = null) {
   const run = {
     v: 1,
     tier,
+    daily,
     round: 0,
     money: 40,
     unlocked: ['rattata', starter],
@@ -52,7 +54,7 @@ export function newRun(starter, tier = 0) {
     badges: [],
     consumables: ['revive'],
     daycare: [],
-    map: buildMap(),
+    map: daily ? withSeed(hashStr(daily), buildMap) : buildMap(),
     eventDone: false,
     shopStock: null,
     log: { kills: 0, dmg: 0, maxTeam: 0 },
@@ -176,6 +178,11 @@ export function unitStats(run, key) {
 export function currentRound(run) { return run.map[run.round]; }
 
 export function prepareRound(run) {
+  // reto diario: los rivales de cada ronda son los mismos para todos
+  if (run.daily) return withSeed(hashStr(run.daily) + run.round * 7919, () => prepareRound0(run));
+  return prepareRound0(run);
+}
+function prepareRound0(run) {
   run.eventDone = false;
   run.shopStock = null;
   const r = currentRound(run);
@@ -371,6 +378,11 @@ export function applyBattle(run, battle) {
   res.money = Math.round((18 + 7 * (run.round + 1) + killValue * 1.4) * (1 + (g.money || 0)) * (run.challenge ? 1.5 : 1) * (1 + (run.options?.[run.optIdx]?.bonus || 0))) + res.payday;
   res.bonus = (run.options?.[run.optIdx]?.bonus || 0) + (run.challenge ? 0.5 : 0);
   res.mods = (run.fightMods || []).filter(m => m !== 'normal').map(m => FIGHT_MODS[m].name);
+  // premios del combate: sin bajas y victoria rápida
+  res.perfect = Object.values(battle.stats).every(st => !st.ko);
+  res.fast = battle.t < 20;
+  res.extra = Math.round(res.money * ((res.perfect ? 0.15 : 0) + (res.fast ? 0.1 : 0)));
+  res.money += res.extra;
   run.money += res.money;
   run.lastResult = res;
   return res;

@@ -138,7 +138,9 @@ export class Ranch3D {
     const Rm = Y.roam;
     let x = rnd(Rm.x0, Rm.x1), z = rnd(Rm.z0, Rm.z1);
     for (let i = 0; i < 60 && !Y.walk(x, z); i++) { x = rnd(Rm.x0, Rm.x1); z = rnd(Rm.z0, Rm.z1); }
-    const m = { ...w, spr, sh, mat, tex, m: MANIFEST[w.dex], x, z, tx: x, tz: z, wait: Math.random() * 3, row: 0, anim: null, frame: 0, ft: 0, drop: animateNew ? 420 : 0, vy: 0, hop: 0 };
+    const m = { ...w, spr, sh, mat, tex, m: MANIFEST[w.dex], x, z, tx: x, tz: z, wait: Math.random() * 3, row: 0, anim: null, frame: 0, ft: 0, drop: 0, vy: 0, hop: 0, mood: 'idle', speed: 46 };
+    // los recién llegados salen corriendo de la Guardería hasta su sitio
+    if (animateNew && Y.house) { m.x = Y.house.x + rnd(-20, 20); m.z = Y.house.z + 40; m.tx = x; m.tz = z; m.speed = 120; m.mood = 'arrive'; m.hop = 0.35; }
     m.sheetW = sheet.image.width; m.sheetH = sheet.image.height;
     this.setAnim(m, 'Idle');
     return m;
@@ -180,9 +182,13 @@ export class Ranch3D {
       } else {
         m.mat.color.set(0xffffff);
         m.wait -= dt;
+        // persiguiendo a un compañero: el destino le sigue
+        if (m.mood === 'chase' && m.buddy) { m.tx = m.buddy.x; m.tz = m.buddy.z; if (m.wait <= 0) { m.mood = 'idle'; m.speed = 46; m.buddy = null; } }
+        if (m.mood === 'nap') { this.setAnim(m, m.m.anims.Sleep ? 'Sleep' : 'Idle'); if (m.wait <= 0) { m.mood = 'idle'; m.hop = 0.3; } }
         const dx = m.tx - m.x, dz = m.tz - m.z, d = Math.hypot(dx, dz);
-        if (d > 2) {
-          const sp = 46 * dt;
+        if (m.mood === 'nap') { /* durmiendo */ }
+        else if (d > (m.mood === 'chase' ? 14 : 2)) {
+          const sp = m.speed * dt;
           m.x += (dx / d) * Math.min(sp, d);
           m.z += (dz / d) * Math.min(sp, d);
           const row = dirRow(Math.atan2(dz, dx) + az);
@@ -190,8 +196,21 @@ export class Ranch3D {
           this.setAnim(m, 'Walk');
         } else {
           this.setAnim(m, 'Idle');
+          if (m.mood === 'arrive') { m.mood = 'idle'; m.speed = 46; m.hop = 0.35; }
+          if (m.mood === 'idle') m.speed = 46;
           if (m.wait <= 0) {
             m.wait = rnd(1, 5);
+            const r = Math.random();
+            // a veces se echa una siesta o se pone a perseguir a otro
+            if (r < 0.08 && m.m.anims.Sleep) { m.mood = 'nap'; m.wait = rnd(4, 9); continue; }
+            if (r < 0.16 && this.mons.length > 1) {
+              const b = this.mons[(Math.random() * this.mons.length) | 0];
+              if (b !== m && !b.ko && Math.hypot(b.x - m.x, b.z - m.z) < 200) {
+                m.mood = 'chase'; m.buddy = b; m.speed = 95; m.wait = rnd(2, 4); m.hop = 0.3;
+                if (!b.mood || b.mood === 'idle') { b.wait = 0; b.speed = 90; }
+                continue;
+              }
+            }
             for (let i = 0; i < 8; i++) {
               const tx = Math.max(Y.roam.x0, Math.min(Y.roam.x1, m.x + rnd(-120, 120))), tz = Math.max(Y.roam.z0, Math.min(Y.roam.z1, m.z + rnd(-90, 90)));
               // sólo destinos con camino libre (se comprueba la mitad y el final)

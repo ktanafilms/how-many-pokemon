@@ -701,3 +701,38 @@ body.killcam .team-bars { opacity: 0; }
 .bt-text.out { opacity: 0; transform: translate(-50%, 10px); transition: opacity .3s, transform .3s; }
 @media (max-width: 900px) and (orientation: portrait), (max-width: 560px) { .bt-text { bottom: 120px; font-size: 15px; } }
 .bonus-tag { font-family: var(--pixb); font-size: 13px; background: #48b060; color: #fff; border-radius: 6px; padding: 1px 6px; border: 1px solid #2a7a3a; vertical-align: middle; }
+.tb { position: relative; transition: transform .2s; }
+.tb.mvp { background: rgba(120,90,10,.7); box-shadow: 0 0 0 2px #ffcb05; }
+.tb.mvp::before { content: '👑'; position: absolute; left: -16px; top: 2px; font-size: 13px; }
+.medals { display: flex; gap: 8px; justify-content: center; margin: 4px 0; }
+.medal { font-family: var(--pixb); font-size: 14px; background: linear-gradient(#fff6d8, #ffe08a); border: 2px solid #c08a20; border-radius: 8px; padding: 2px 8px; color: #5a3a00; animation: pop .3s .4s both; }
+.medal b { color: #2a8a3a; }
+.fly-coin { position: fixed; z-index: 200; width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff5b0 0 20%, #ffcb05 25% 70%, #c08a00 75%); box-shadow: 0 0 6px rgba(255,210,60,.8); pointer-events: none; }
+
+/* Pokédex y logros */
+.row-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.dex-modal { width: min(900px, 94vw); max-height: 88vh; display: flex; flex-direction: column; }
+.dex-tabs { display: flex; gap: 6px; justify-content: center; margin: 4px 0 8px; }
+.dex-tabs .btn.on { background: linear-gradient(var(--yellow-l), var(--yellow)); }
+.dex-body { overflow-y: auto; min-height: 0; flex: 1; padding: 2px; }
+.dex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.dex-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; background: #f4f7fc; border: 2px solid #c8d4ea; border-radius: 10px; padding: 6px 4px; font-size: 13px; text-align: center; }
+.dex-cell img { width: 48px; height: 48px; border-radius: 8px; border: 2px solid var(--ink); background: #fff; }
+.dex-cell small { color: #8a94a8; font-size: 11px; }
+.dex-cell.dim img { filter: grayscale(.7); opacity: .8; }
+.dex-cell.unseen img { filter: brightness(0); opacity: .35; }
+.dex-cell.unseen b { color: #8a94a8; }
+.stars .st { font-style: normal; color: #c8d0dc; font-size: 14px; }
+.stars .st.on.s1 { color: #c87a3a; } .stars .st.on.s2 { color: #a8b4c8; text-shadow: 0 0 2px #fff; } .stars .st.on.s3 { color: #ffcb05; text-shadow: 0 0 4px #ffe08a; }
+.ach-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; }
+.ach { display: flex; gap: 8px; align-items: center; background: #f0f2f6; border-radius: 10px; padding: 6px 10px; opacity: .65; border: 2px solid transparent; }
+.ach.on { opacity: 1; background: linear-gradient(#fff8e0, #ffeeb0); border-color: #e0b040; }
+.ach span { font-size: 22px; } .ach b { display: block; font-size: 14px; } .ach small { color: #5a6478; font-size: 12px; }
+/* aviso de logro */
+.unlock { position: fixed; right: 16px; top: 90px; z-index: 120; display: flex; gap: 10px; align-items: center; min-width: 240px; max-width: 340px; background: linear-gradient(#fffbe8, #ffeaa8); border: 3px solid #283048; border-radius: 12px; padding: 8px 12px; box-shadow: 0 4px 0 rgba(0,0,0,.3); animation: unlockin .45s cubic-bezier(.2,1.4,.4,1); }
+.unlock .ic { font-size: 30px; }
+.unlock small { display: block; font-family: var(--pixb); font-size: 11px; color: #a07010; text-transform: uppercase; letter-spacing: .06em; }
+.unlock b { font-family: var(--pixb); font-size: 16px; color: #283048; }
+.unlock p { margin: 2px 0 0; font-size: 12px; color: #5a6478; }
+.unlock.out { transform: translateX(120%); opacity: 0; transition: transform .4s, opacity .4s; }
+@keyframes unlockin { from { transform: translateX(120%); } }

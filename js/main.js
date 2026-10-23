@@ -19,6 +19,7 @@ import { ARENA } from './game/sim.js';
 import { Battle3D } from './three/Battle3D.js';
 import { Ranch3D } from './three/Ranch3D.js';
 import { preloadMap } from './three/maps.js';
+import * as Meta from './game/meta.js';
 import { playMusic, jingle, sfx, cry, volumes, setMusic, setSfx } from './audio.js';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -26,6 +27,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 class App {
   constructor() {
     this.run = null;
+    // cámara automática en combate (se puede apagar en el panel de sonido)
+    this.autoCam = (() => { try { return localStorage.getItem('how-many-pokemon-autocam') !== '0'; } catch (e) { return true; } })();
     // la velocidad de combate elegida se recuerda entre combates
     this.speed = (() => { try { return +localStorage.getItem('how-many-pokemon-speed') || 1; } catch (e) { return 1; } })();
     this.armed = -1;
@@ -124,7 +127,7 @@ class App {
         <div class="buttons">
           ${saved && !saved.won ? `<button class="btn big" data-continue>Continuar <small>Ronda ${saved.round + 1} · ${ACTS[saved.map[saved.round].act].name}</small></button>` : ''}
           <button class="btn big red" data-new>Nueva partida</button>
-          <button class="btn small ghost" data-sound>♪ Sonido</button>
+          <div class="row-btns"><button class="btn small blue" data-daily>📅 Reto diario</button><button class="btn small blue" data-dex>📖 Pokédex y logros</button><button class="btn small ghost" data-sound>♪ Sonido</button></div>
         </div>
         <div class="press">Toca para activar el sonido</div>
         <div class="foot">Fan game sin ánimo de lucro inspirado en <i>How Many Dudes?</i> (Butterscotch Shenanigans).<br>
@@ -135,6 +138,8 @@ class App {
       if (e.target.closest('[data-new]')) this.newGame();
       if (e.target.closest('[data-continue]')) { this.run = saved; this.ranchEnter = true; this.goRanch(); }
       if (e.target.closest('[data-sound]')) this.soundPanel(e.target.closest('[data-sound]'));
+      if (e.target.closest('[data-dex]')) { sfx('select'); EV.dexModal(this); }
+      if (e.target.closest('[data-daily]')) { sfx('select'); EV.dailyModal(this); }
     });
     ui().appendChild(t);
   }
@@ -149,6 +154,19 @@ class App {
       this.ranchEnter = true;
       this.goRanch();
     });
+  }
+
+  // Reto diario: misma partida (inicial, mapa y rivales) para todos ese día
+  newDaily() {
+    this.clearUI();
+    playMusic('act0');
+    const day = Meta.todayKey();
+    const seed = Meta.hashStr(day);
+    const starter = ['bulbasaur', 'charmander', 'squirtle'][seed % 3];
+    this.run = R.newRun(starter, 0, day);
+    R.save(this.run);
+    this.ranchEnter = true;
+    this.goRanch();
   }
 
   // ---------- Rancho ----------
@@ -332,10 +350,18 @@ class App {
       <div class="hud-bottom panel">
         <div class="allies" ${tip('Tus Pokémon en pie / que empezaron el combate')}><img class="px icon mini" src="assets/items/poke-ball.png" alt=""><b data-allies>0</b><div class="allybar"><div data-allybar></div></div></div>
         ${slots.join('')}
-        <div class="speed">${[0, 1, 2, 4].map(s => `<button class="btn small ${this.speed === s ? 'on' : ''}" data-speed="${s}">${s === 0 ? '❚❚' : '×' + s}</button>`).join('')}</div>
+        <div class="speed">${[0, 1, 2, 4].map(s => `<button class="btn small ${this.speed === s ? 'on' : ''}" data-speed="${s}">${s === 0 ? '❚❚' : '×' + s}</button>`).join('')}${this.use3d ? `<button class="btn small cam-btn ${this.autoCam ? 'on' : ''}" data-autocam ${tip(this.autoCam ? 'Cámara automática: sigue la acción. Toca para dejarla fija.' : 'Cámara fija. Toca para que siga la acción.')}>🎥</button>` : ''}</div>
       </div>
     </div>`);
     hud.addEventListener('click', e => {
+      if (e.target.closest('[data-autocam]')) {
+        this.autoCam = !this.autoCam;
+        try { localStorage.setItem('how-many-pokemon-autocam', this.autoCam ? '1' : '0'); } catch (err) { /* nada */ }
+        if (!this.autoCam && this.b3d) { this.b3d.shot = null; this.b3d.resetCamera(); }
+        this.toast(this.autoCam ? 'Cámara automática' : 'Cámara fija');
+        this.rerenderHud();
+        return;
+      }
       const s = e.target.closest('[data-speed]');
       if (s) {
         this.speed = +s.dataset.speed;
@@ -408,6 +434,15 @@ class App {
     this.rerenderHud();
   }
 
+  // Aviso de logro o estrella conseguidos
+  unlockToast(g) {
+    jingle('item');
+    const t = el(`<div class="unlock ${g.kind}"><span class="ic">${g.kind === 'star' ? '★' : '🏆'}</span><div><small>${g.kind === 'star' ? 'Estrella de especie' : 'Logro'}</small><b>${g.name}</b>${g.desc ? `<p>${g.desc}</p>` : ''}</div></div>`);
+    document.body.appendChild(t);
+    setTimeout(() => t.classList.add('out'), 3200);
+    setTimeout(() => t.remove(), 3700);
+  }
+
   // Vida de cada especie de tu equipo (pequeño, a un lado, como el resumen por tipo de Dude de HMD)
   teamBars(hud, sim) {
     const box = hud.querySelector('[data-teambars]');
@@ -421,6 +456,9 @@ class App {
       g.set(a.key, e);
     }
     const list = [...g.values()].sort((a, b) => b.n - a.n);
+    // el que más daño lleva este combate lleva corona
+    let mvp = null, best = 0;
+    for (const [k, st] of Object.entries(sim.stats)) if (st.dmg > best) { best = st.dmg; mvp = k; }
     if (box.childElementCount !== list.length) {
       box.innerHTML = list.map(e => `<div class="tb" data-k="${e.key}"><img class="px" src="${portrait(e.dex)}" alt=""><div class="tb-bar"><i></i></div><b></b></div>`).join('');
     }
@@ -433,6 +471,7 @@ class App {
       bar.className = p > 0.5 ? '' : p > 0.2 ? 'mid' : 'low';
       row.querySelector('b').textContent = e.alive;
       row.classList.toggle('dead', e.alive === 0);
+      row.classList.toggle('mvp', e.key === mvp && best > 0);
     }
   }
 
@@ -479,6 +518,10 @@ class App {
     const r = R.currentRound(this.run);
     const res = R.applyBattle(this.run, sim);
     this.clearUI();
+    const got = Meta.recordBattle(this.run, res, sim);
+    if (!res.win) got.push(...Meta.recordRunEnd(this.run, false));
+    // logros y estrellas nuevos (escalonados para que se lean)
+    got.forEach((g, i) => setTimeout(() => this.unlockToast(g), 2200 + i * 1600));
     if (!res.win) {
       R.clearSave();
       playMusic(null);
@@ -499,7 +542,7 @@ class App {
       const s = steps.shift();
       if (s) { s(next); return; }
       R.advanceRound(this.run);
-      if (this.run.won) { R.clearSave(); playMusic('halloffame'); EV.endScreen(this, true); return; }
+      if (this.run.won) { Meta.recordRunEnd(this.run, true).forEach((g, i) => setTimeout(() => this.unlockToast(g), 1500 + i * 1600)); R.clearSave(); playMusic('halloffame'); EV.endScreen(this, true); return; }
       R.save(this.run);
       battleTransition({ back: true }, () => { this.goRanch(); return this.ranch3d?.ready; });
     };
@@ -537,6 +580,7 @@ class App {
       <h4>Sonido</h4>
       <label>♪ Música <input type="range" min="0" max="1" step="0.05" value="${v.music}" data-m><button class="btn small mute ${v.music ? '' : 'on'}" data-mute="m">${v.music ? '🔈' : '🔇'}</button></label>
       <label>🔊 Efectos <input type="range" min="0" max="1" step="0.05" value="${v.sfx}" data-s><button class="btn small mute ${v.sfx ? '' : 'on'}" data-mute="s">${v.sfx ? '🔈' : '🔇'}</button></label>
+      <div class="toggle"><span>Cámara</span><span><button class="btn small ${this.autoCam ? 'on' : ''}" data-cam="1">Auto</button> <button class="btn small ${this.autoCam ? '' : 'on'}" data-cam="0">Fija</button></span></div>
       <div class="toggle"><span>Combate</span><span><button class="btn small ${this.use3d ? 'on' : ''}" data-view="3d">2.5D</button> <button class="btn small ${this.use3d ? '' : 'on'}" data-view="2d">2D</button></span></div>
       <button class="btn small" data-x>Cerrar</button>
     </div>`);
@@ -556,6 +600,13 @@ class App {
         if (k === 'm') setMusic(nv); else { setSfx(nv); sfx('coin'); }
         p.querySelector(k === 'm' ? '[data-m]' : '[data-s]').value = nv;
         muteBtn(k, nv);
+      }
+      const cb = e.target.closest('[data-cam]');
+      if (cb) {
+        this.autoCam = cb.dataset.cam === '1';
+        try { localStorage.setItem('how-many-pokemon-autocam', this.autoCam ? '1' : '0'); } catch (err) { /* nada */ }
+        p.querySelectorAll('[data-cam]').forEach(b => b.classList.toggle('on', b === cb));
+        if (!this.autoCam && this.b3d) { this.b3d.shot = null; this.b3d.resetCamera(); }
       }
       const vw = e.target.closest('[data-view]');
       if (vw) {

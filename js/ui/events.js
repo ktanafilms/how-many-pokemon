@@ -1,6 +1,7 @@
 // Ventanas de eventos: inicial, tienda, vitaminas, guardería, recompensas y evolución.
 // Cada una la presenta un personaje con su diálogo.
-import { PLAYER, STARTERS } from '../data/species.js';
+import { PLAYER, STARTERS, ENEMIES } from '../data/species.js';
+import * as Meta from '../game/meta.js';
 import { RELICS, BADGES, VITAMINS, CONSUMABLES, MAX_CONSUMABLES, icon } from '../data/items.js';
 import * as R from '../game/run.js';
 import { matchup, matchTag } from '../game/advice.js';
@@ -199,6 +200,25 @@ export function daycareModal(app, done) {
   });
 }
 
+// Monedas que vuelan desde los lados hasta el contador de ₽ de la ventana de victoria
+function coinShower(target, n) {
+  if (!target) return;
+  setTimeout(() => {
+    const r = target.getBoundingClientRect();
+    for (let i = 0; i < n; i++) {
+      const c = document.createElement('i');
+      c.className = 'fly-coin';
+      const fromLeft = i % 2 === 0;
+      c.style.left = `${fromLeft ? -20 : window.innerWidth + 20}px`;
+      c.style.top = `${window.innerHeight * (0.3 + Math.random() * 0.5)}px`;
+      document.body.appendChild(c);
+      const dx = r.left + r.width / 2 - parseFloat(c.style.left), dy = r.top + r.height / 2 - parseFloat(c.style.top);
+      c.animate([{ transform: 'translate(0,0) scale(1)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 120}px) scale(1.2)`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) scale(.6)` }], { duration: 650 + Math.random() * 300, delay: i * 45, easing: 'ease-in', fill: 'forwards' })
+        .onfinish = () => { c.remove(); if (i % 3 === 0) sfx('coin'); };
+    }
+  }, 350);
+}
+
 export function resultsModal(app, res, done) {
   const best = Object.entries(res.stats).sort((a, b) => b[1].dmg - a[1].dmg);
   const mvp = best[0];
@@ -210,12 +230,14 @@ export function resultsModal(app, res, done) {
   const m = modal(`
     <h2 class="win-title">¡VICTORIA!</h2>
     <div class="earn">Has ganado <span class="money">₽<b data-count="${res.money}">0</b></span>${res.payday ? ` <small>(₽${res.payday} de Día de Pago)</small>` : ''}${res.bonus ? ` <span class="bonus-tag">+${Math.round(res.bonus * 100)}% ${res.mods?.length ? res.mods.join(' + ') : 'Reto'}</span>` : ''}</div>
+    ${res.perfect || res.fast ? `<div class="medals">${res.perfect ? `<span class="medal">✦ Sin bajas <b>+15%</b></span>` : ''}${res.fast ? `<span class="medal">⚡ Victoria rápida <b>+10%</b></span>` : ''}</div>` : ''}
     ${mvp ? `<div class="mvp">${img(res.names[mvp[0]][1])}<div><small>MVP del combate</small><b>${res.names[mvp[0]][0]}</b></div></div>` : ''}
     <table class="score"><tr><th>Especie</th><th>Daño</th><th>Derrotas</th><th>Curación</th><th>KO</th></tr>${rows}</table>
     ${ko}
     <div class="actions"><button class="btn" data-close>¡GENIAL!</button></div>`, { onClose: done });
   stagger(m);
   countUp(m.querySelector('[data-count]'));
+  coinShower(m.querySelector('.earn .money'), Math.min(24, 6 + Math.round(res.money / 40)));
   m.addEventListener('click', e => { if (e.target.closest('[data-close]')) { sfx('select'); m.close(); } });
 }
 
@@ -327,5 +349,49 @@ export function endScreen(app, win) {
   m.addEventListener('click', e => {
     if (e.target.closest('[data-new]')) { sfx('select'); m.close(); app.newGame(); }
     if (e.target.closest('[data-menu]')) { sfx('back'); m.close(); app.showTitle(); }
+  });
+}
+
+// ---------- Pokédex, estrellas y logros ----------
+export function dexModal(app) {
+  const m0 = Meta.load();
+  const { wild, mine } = Meta.dexList();
+  let tab = 'mine';
+  const stars = n => [1, 2, 3].map(i => `<i class="st ${i <= n ? 'on s' + i : ''}">★</i>`).join('');
+  const body = () => {
+    if (tab === 'mine') return `<p class="lead">Consigue estrellas superando rondas con muchos Pokémon de una especie: ${Meta.STAR_RULES.map(r => `<b>${r.name}</b> ronda ${r.round} con ${r.n}`).join(' · ')}.</p>
+      <div class="dex-grid">${mine.map(k => { const sp = PLAYER[k], s = m0.stars[k] || 0; return `<div class="dex-cell ${s ? '' : 'dim'}" ${tip(`<h4>${sp.stages.map(x => x.name).join(' → ')}</h4>${types(sp.types)}<p><b>${sp.abilityName}:</b> ${sp.desc}</p>`)}>${img(sp.stages[Math.min(s, sp.stages.length - 1)].dex)}<b>${sp.stages[0].name}</b><span class="stars">${stars(s)}</span></div>`; }).join('')}</div>`;
+    if (tab === 'wild') return `<p class="lead">Vistos: <b>${wild.filter(k => m0.seen[k]).length}</b> / ${wild.length}</p>
+      <div class="dex-grid">${wild.map(k => { const e = ENEMIES[k], seen = m0.seen[k]; return `<div class="dex-cell ${seen ? '' : 'unseen'}" ${seen ? tip(`<h4>#${e.dex} ${e.name}${e.boss ? ' 👑' : ''}</h4>${types(e.types)}<p>Visto ${m0.seen[k]} veces · Derrotado ${m0.beaten[k] || 0}</p>`) : ''}>${img(e.dex)}<b>${seen ? e.name : '???'}</b><small>#${String(e.dex).padStart(3, '0')}</small></div>`; }).join('')}</div>`;
+    const list = Object.entries(Meta.ACHIEVEMENTS);
+    return `<p class="lead">Logros: <b>${list.filter(([k]) => m0.ach[k]).length}</b> / ${list.length} · Mejor ronda: <b>${m0.best || 0}</b> · Partidas ganadas: <b>${m0.wins || 0}</b></p>
+      <div class="ach-list">${list.map(([k, a]) => `<div class="ach ${m0.ach[k] ? 'on' : ''}"><span>${m0.ach[k] ? '🏆' : '🔒'}</span><div><b>${a.name}</b><small>${a.desc}</small></div></div>`).join('')}</div>`;
+  };
+  const shell = () => `<h2 class="title-font">Pokédex</h2>
+    <div class="dex-tabs">${[['mine', 'Tus especies'], ['wild', 'Salvajes'], ['ach', 'Logros']].map(([k, n]) => `<button class="btn small ${tab === k ? 'on' : ''}" data-tab="${k}">${n}</button>`).join('')}</div>
+    <div class="dex-body">${body()}</div>
+    <div class="actions"><button class="btn" data-close>Cerrar</button></div>`;
+  const m = modal(shell());
+  m.querySelector('.modal').classList.add('dex-modal');
+  m.addEventListener('click', e => {
+    const t = e.target.closest('[data-tab]');
+    if (t) { sfx('click'); tab = t.dataset.tab; m.render(shell()); return; }
+    if (e.target.closest('[data-close]')) { sfx('back'); m.close(); }
+  });
+}
+
+export function dailyModal(app) {
+  const day = Meta.todayKey();
+  const seed = Meta.hashStr(day);
+  const starter = ['bulbasaur', 'charmander', 'squirtle'][seed % 3];
+  const best = Meta.load().daily[day] || 0;
+  const saved = R.load();
+  const m = scene('oak', `¡El reto de hoy es igual para todos los entrenadores! Mismos rivales y mismo mapa. Empiezas con ${PLAYER[starter].stages[0].name}. ¿Hasta qué ronda llegarás?`,
+    `<div class="lead">📅 ${day} · Tu mejor resultado hoy: <b>${best ? `ronda ${best}` : 'sin jugar'}</b></div>
+     ${saved && !saved.won ? '<div class="note">Empezar el reto sustituye a tu partida guardada.</div>' : ''}
+     <div class="actions"><button class="btn red" data-go>¡Empezar el reto!</button><button class="btn" data-close>Volver</button></div>`);
+  m.addEventListener('click', e => {
+    if (e.target.closest('[data-go]')) { sfx('select'); m.close(); app.newDaily(); }
+    if (e.target.closest('[data-close]')) { sfx('back'); m.close(); }
   });
 }

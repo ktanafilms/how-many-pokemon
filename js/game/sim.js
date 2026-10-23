@@ -326,7 +326,7 @@ export class Battle {
     const key = src ? src.key : o.srcKey;
     if (key && (src ? src.side === 0 : true) && tgt.side === 1) this.stat(key).dmg += dealt;
     if (tgt.side === 0) this.stat(tgt.key).taken += dealt;
-    if (!o.dot || amount > 2) this.emit('hit', { id: tgt.id, dmg: amount, crit, eff, side: tgt.side });
+    if (!o.dot || amount > 2) this.emit('hit', { id: tgt.id, dmg: amount, crit, eff, side: tgt.side, type: o.type || src?.atkType, from: src?.id });
 
     if (src && this.alive(src) && !o.dot) {
       const ls = (src.lifesteal || 0) + (src.buffs.lsAura > 0 ? 0.2 : 0);
@@ -369,7 +369,7 @@ export class Battle {
     if (u.side === 0) {
       u.state = 'ko'; u.air = null; u.z = 0; u.vx = u.vy = 0;
       this.stat(u.key).ko++;
-      this.emit('ko', { id: u.id });
+      this.emit('ko', { id: u.id, from: src?.id ?? null });
       if (u.ability === 'selfdestruct') this.move(u, 'Autodestrucción');
       if (u.ability === 'selfdestruct') this.explode(u.x, u.y, 55 + 12 * u.stage, u.atk * 8 * u.power, u, 1);
     } else {

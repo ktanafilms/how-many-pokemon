@@ -88,3 +88,12 @@ Púas, Pisotón, Llamarada/Trueno/Ventisca, Descanso, Psicoataque.
 - Rondas normales más duras (presupuesto y escalado mayores), menos dinero por ronda.
 - **Ligas** (Tiers de HMD): Normal → Experta → Maestra, se desbloquean ganando la anterior. Mutadores: rondas más duras, Furia antes, más Alfa, tienda más cara, jefes con más PS, KO más largos.
 - **Kill cam**: el último golpe de la ronda se ve de cerca y a cámara lenta, con bandas de cine.
+
+## Espectáculo y metaprogresión (v2.8)
+- Partículas por tipo en cada golpe, estrellas y micropausa en críticos, fuego/humo en explosiones, estelas, monedas al debilitar, ambiente por acto (hojas, polvo, espuma, fuegos fatuos, polen, cristales).
+- Tus Pokémon debilitados salen despedidos dando vueltas; los rivales retroceden al recibir golpes.
+- Primer choque a cámara lenta. Cámara automática que sigue la pelea y se acerca a explosiones, rugidos y meteoritos (botón 🎥 y opción en Sonido).
+- Racha «K.O. ×N», corona al MVP en directo, pitido de PS bajos, música más rápida con la Furia.
+- Premios «Sin bajas» (+15%) y «Victoria rápida» (+10%), monedas volando al contador.
+- Rancho: siestas, persecuciones y los nuevos llegan corriendo desde la Guardería.
+- Pokédex (salvajes vistos), estrellas de especie (bronce/plata/oro), 17 logros y reto diario con semilla del día.

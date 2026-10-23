@@ -168,6 +168,9 @@ const SFX = {
   roar: () => { noise({ dur: 0.6, vol: 0.35, f: 600 }); tone({ type: 'sawtooth', f0: 110, f1: 70, dur: 0.6, vol: 0.2 }); },
   pop: () => tone({ f0: 400, f1: 1200, dur: 0.08, vol: 0.12 }),
   whoosh: () => noise({ dur: 0.35, vol: 0.2, f: 1400 }),
+  // pitido de PS bajos de los juegos de GB/DS
+  lowhp: () => { tone({ type: 'square', f0: 1760, dur: 0.07, vol: 0.05 }); tone({ type: 'square', f0: 1760, dur: 0.07, vol: 0.05, delay: 0.14 }); },
+  combo: () => tone({ type: 'square', f0: 880, f1: 1760, dur: 0.09, vol: 0.08 }),
   start: () => { [392, 523, 659, 784].forEach((f, i) => tone({ f0: f, dur: 0.12, vol: 0.12, delay: i * 0.07 })); },
 };
 const LIMITS = { hit: 70, crit: 120, super: 160, weak: 200, allyKo: 90, faint: 120, text: 35, boom: 150, fire: 120, zap: 120, throw: 100, coin: 80 };
@@ -181,6 +184,8 @@ export function sfx(name) {
 
 // ---------- Volumen ----------
 export const volumes = () => ({ ...state });
+// tempo de la música (un poco más rápida cuando el combate se pone tenso)
+export function musicRate(r) { if (current) { current.el.preservesPitch = false; current.el.playbackRate = r; } }
 export function setMusic(v) {
   state.music = v;
   if (current) { current.el._fade = (current.el._fade || 0) + 1; current.el.volume = v; }

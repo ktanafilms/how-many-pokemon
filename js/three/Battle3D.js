@@ -5,9 +5,11 @@ import * as THREE from '../../lib/three.module.min.js';
 import { Battle } from '../game/sim.js';
 import { TRAIT_INFO } from '../data/species.js';
 import { MANIFEST, animDuration } from '../scenes/anims.js';
-import { sfx, cry } from '../audio.js';
+import { sfx, cry, musicRate } from '../audio.js';
 import { buildEnvironment } from './env.js';
 import { addMap, MAPS } from './maps.js';
+import { Particles } from './particles.js';
+import { TYPES } from '../data/types.js';
 
 const ALLY_SCALE = 1.45;
 const loader = new THREE.TextureLoader();
@@ -48,6 +50,10 @@ export class Battle3D {
     this.views = new Map();
     this.fx = [];
     this.texts = [];
+    this.parts = new Particles();
+    this.parts.scale = 1.8; // a la distancia de la cámara, un poco más grandes que en el mundo
+    this.hitstop = 0;
+    this.lastStop = 0;
     this.dmgAcc = new Map();
     this.feedT = {};
     this.ended = false;
@@ -284,8 +290,11 @@ export class Battle3D {
     this.checkKillcam(dt);
     // en la kill cam todo va a cámara lenta (como mucho a velocidad ×1)
     const slow = this.killcam ? this.killcam.scale : 1;
-    const simSpeed = this.killcam ? Math.min(speed, 1) * slow : speed;
+    let simSpeed = this.killcam ? Math.min(speed, 1) * slow : speed;
+    // primer choque de los dos bandos a cámara lenta
+    if (this.clash) { this.clash.t -= dt; simSpeed *= this.clash.t > 0 ? 0.3 : 1; if (this.clash.t <= -0.3) this.clash = null; }
     if (this.introT > 0) this.introT -= dt;
+    else if (this.hitstop > 0) this.hitstop -= dt; // micropausa en los golpes críticos
     else if (!this.ended && simSpeed > 0) this.sim.update(dt * simSpeed);
     this.handleEvents();
     this.updateCamera(dt);
@@ -407,6 +416,18 @@ export class Battle3D {
       }
       const x = u.x - W2, z = u.y - H2;
       v.spr.position.set(x, u.z + v.dropY, z);
+      if (v.fly) {
+        // vuelo del KO: arco, giro y caída; al terminar se queda dormido en su sitio
+        v.fly.t += dt;
+        const k = Math.min(1, v.fly.t / v.fly.dur);
+        // sale desde donde recibió el golpe y aterriza en el sitio donde queda KO
+        v.spr.position.x -= v.fly.dx * (1 - k);
+        v.spr.position.z -= v.fly.dz * (1 - k);
+        v.spr.position.y += Math.sin(k * Math.PI) * v.fly.h;
+        v.spr.material.rotation = k < 1 ? k * Math.PI * 4 : 0;
+        if (k >= 1) v.fly = null;
+      }
+      if (v.kick) { v.kick.t -= dt; if (v.kick.t <= 0) v.kick = null; else { v.spr.position.x += v.kick.x; v.spr.position.z += v.kick.z; } }
       // destellos de los variocolor
       if (u.shiny && Math.random() < dt * 1.2) this.floatText(u, 26 * u.size + Math.random() * 20, '✦', '#fff27a', 14);
       // al ganar, tus Pokémon dan saltitos de alegría (como los Dudes de HMD)
@@ -435,6 +456,8 @@ export class Battle3D {
       this.stepAnim(v, dt);
       if (u.lastHurt !== v.lastHurt) {
         v.lastHurt = u.lastHurt;
+        // pequeño retroceso visual del sprite (en dirección contraria a quien le golpea)
+        if (u.side) { const a = u.facing + Math.PI; v.kick = { x: Math.cos(a) * 3, z: Math.sin(a) * 3, t: 0.12 }; }
         if (now > v.hurtUntil + 0.3) v.hurtUntil = now + 0.07;
       }
       v.flash.value = u.side && now < v.hurtUntil ? 0.6 : 0;
@@ -481,8 +504,42 @@ export class Battle3D {
     c.updateMatrixWorld();
   }
 
+  // Cámara automática: encuadra donde está la pelea y, a ratos, se acerca a lo más vistoso
+  // (un ataque de área del jefe, una explosión grande, un meteorito). Si el jugador toca la cámara,
+  // se aparta unos segundos.
+  director(dt) {
+    if (!this.app.autoCam || this.killcam || this.hold || this.ended) return;
+    if (performance.now() - (this.userCamT || 0) < 5000) return;
+    const sh = this.shot;
+    if (sh) {
+      sh.t -= dt;
+      if (sh.t <= 0) this.shot = null;
+      else { Object.assign(this.camGoal, { px: sh.x - this.W / 2, pz: sh.y - this.H / 2, zoom: sh.zoom, az: sh.az, pitch: this.basePitch() - 0.06 }); return; }
+    }
+    // encuadre general: caja de los que están luchando (con margen), sin acercarse demasiado
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, n = 0;
+    for (const u of this.sim.units) {
+      if (u.hp <= 0 || u.state === 'ko' || u.state === 'dead') continue;
+      x0 = Math.min(x0, u.x); x1 = Math.max(x1, u.x); y0 = Math.min(y0, u.y); y1 = Math.max(y1, u.y); n++;
+    }
+    if (!n) return;
+    const fw = (x1 - x0 + 160) / this.W, fh = (y1 - y0 + 140) / this.H;
+    const zoom = clamp(Math.max(fw, fh) * 0.95, 0.62, 0.95);
+    Object.assign(this.camGoal, { px: clamp((x0 + x1) / 2 - this.W / 2, -this.W * 0.25, this.W * 0.25), pz: clamp((y0 + y1) / 2 - this.H / 2, -this.H * 0.2, this.H * 0.2), zoom, az: this.camGoal.az * 0.98, pitch: this.basePitch() });
+  }
+  basePitch() { return this.portrait ? 0.8 : 0.62; }
+  // propone un plano corto (si no hay otro más importante en curso)
+  focus(x, y, prio = 1, zoom = 0.5, dur = 1.6) {
+    if (!this.app.autoCam || this.killcam || this.hold) return;
+    if (this.shot && this.shot.prio > prio) return;
+    if (performance.now() - (this.lastShotT || 0) < 2500 && !(this.shot && prio > this.shot.prio)) return;
+    this.lastShotT = performance.now();
+    this.shot = { x, y, prio, zoom, t: dur, az: clamp((x - this.W / 2) / this.W * 0.5, -0.2, 0.2) };
+  }
+
   updateCamera(dt) {
-    const k = 1 - Math.pow(this.killcam ? 0.004 : 0.0005, dt);
+    this.director(dt);
+    const k = 1 - Math.pow(this.killcam ? 0.004 : this.shot ? 0.03 : 0.12, dt);
     for (const key of ['az', 'pitch', 'zoom', 'px', 'pz']) this.cam[key] = lerp(this.cam[key], this.camGoal[key], k);
     let sx = 0, sz = 0;
     if (this.shakeT > 0) { this.shakeT -= dt; sx = (Math.random() - 0.5) * 10; sz = (Math.random() - 0.5) * 10; }
@@ -524,6 +581,7 @@ export class Battle3D {
     let start = null, moved = 0, pinch = null;
     el.addEventListener('contextmenu', e => e.preventDefault());
     el.addEventListener('pointerdown', e => {
+      this.userCamT = performance.now(); this.shot = null;
       el.setPointerCapture(e.pointerId);
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       start = { x: e.clientX, y: e.clientY, button: e.button, shift: e.shiftKey };
@@ -565,6 +623,7 @@ export class Battle3D {
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
     el.addEventListener('wheel', e => {
+      this.userCamT = performance.now(); this.shot = null;
       e.preventDefault();
       this.camGoal.zoom = clamp(this.camGoal.zoom * Math.exp(e.deltaY * 0.0012), 0.42, 1.15);
     }, { passive: false });
@@ -619,6 +678,19 @@ export class Battle3D {
     for (const e of ev) {
       switch (e.type) {
         case 'hit':
+          this.hitParticles(e);
+          if (!this.clashDone && e.side === 1 && e.from != null) {
+            this.clashDone = true;
+            const v = this.view(e.id);
+            if (v) {
+              this.clash = { t: 0.7 };
+              this.shakeT = Math.max(this.shakeT, 0.25);
+              this.addFx('ring', 0.7, { x: v.u.x, y: v.u.y, r: 120, color: '#ffffff' });
+              this.parts.burst(v.u.x, v.u.y, 4, 22, { kind: 'puff', color: '#d8c8a8', alpha: 0.6, speed: 160, up: 30, g: 0, size: 6, grow: 1.2, life: 0.8, drag: 3 });
+              this.focus(v.u.x - 40, v.u.y, 2, 0.6, 1.2);
+              sfx('crit');
+            }
+          }
           if (e.side === 1) {
             sfx(e.crit ? 'crit' : e.eff > 1 ? 'super' : e.eff < 1 ? 'weak' : 'hit');
             const a = this.dmgAcc.get(e.id) || { dmg: 0, crit: false, eff: 1 };
@@ -626,49 +698,93 @@ export class Battle3D {
             this.dmgAcc.set(e.id, a);
           }
           break;
-        case 'fireball': { const v = this.view(e.from); if (v) this.addFx('proj', e.dur, { x0: v.u.x, y0: v.u.y, h0: 20, x1: e.x, y1: e.y, color: '#ff7a1a', r: 6, arc: 60 }); break; }
+        case 'fireball': {
+          const v = this.view(e.from);
+          if (v) {
+            this.addFx('proj', e.dur, { x0: v.u.x, y0: v.u.y, h0: 20, x1: e.x, y1: e.y, color: '#ff7a1a', r: 7, arc: 60, trail: '#ffb43a' });
+            this.parts.burst(v.u.x, v.u.y, 18, 4, { kind: 'dot', color: '#ffb43a', speed: 50, up: 60, g: 0, life: 0.35, size: 2.5, drag: 3 });
+          }
+          break;
+        }
         case 'projectile': {
           const v = this.view(e.from);
-          if (v) this.addFx('proj', e.dur, { x0: v.u.x, y0: v.u.y, h0: 30 * v.u.size, x1: e.x, y1: e.y, color: hex(e.color), r: e.kind === 'star' ? 7 : 9, arc: 90, star: e.kind === 'star' });
+          if (v) this.addFx('proj', e.dur, { x0: v.u.x, y0: v.u.y, h0: 30 * v.u.size, x1: e.x, y1: e.y, color: hex(e.color), r: e.kind === 'star' ? 7 : 9, arc: 90, star: e.kind === 'star', trail: hex(e.color) });
           this.addFx('target', e.dur, { x: e.x, y: e.y, r: 40, color: hex(e.color) });
           break;
         }
         case 'bone': { const a = this.view(e.from), b = this.view(e.to); if (a && b) this.addFx('bone', 0.5, { a: a.u, b: b.u }); break; }
-        case 'explosion':
+        case 'explosion': {
+          // fuego, humo y escombros
+          const col = hex(e.color ?? 0xffa23a), P = this.parts, n = Math.min(26, 8 + e.r / 6) * (P.busy > 0.7 ? 0.4 : 1);
+          P.burst(e.x, e.y, 6, n, { kind: 'dot', color: col, speed: e.r * 2.2, up: 140, g: 380, size: 4, life: 0.5, drag: 2 });
+          P.burst(e.x, e.y, 10, n * 0.5, { kind: 'dot', color: '#fff2a0', speed: e.r * 1.6, up: 90, g: 300, size: 2.5, life: 0.35 });
+          P.burst(e.x, e.y, 14, n * 0.35, { kind: 'puff', color: '#6a6470', alpha: 0.45, speed: e.r * 0.6, up: 40, g: -30, size: 9, grow: 1.4, life: 0.9, drag: 3 });
+          if (e.big || e.r > 90) { this.shakeT = Math.max(this.shakeT, 0.35); this.focus(e.x, e.y, 2, 0.55, 1.3); }
+        }
           sfx(e.big || e.r > 80 ? 'boom' : 'fire');
           this.addFx('boom', e.big ? 0.6 : 0.35, { x: e.x, y: e.y, r: e.r, color: hex(e.color ?? 0xffa23a) });
           if (e.big) this.shakeT = 0.25;
           break;
-        case 'pulse': sfx('heal'); this.addFx('ring', 0.45, { x: e.x, y: e.y, r: e.r, color: hex(e.color), fill: true }); break;
-        case 'wave': this.addFx('ring', 0.6, { x: e.x, y: e.y, r: e.r, color: hex(e.color), fill: true }); this.shakeT = 0.15; break;
-        case 'lightning': sfx('zap'); this.addFx('bolt', 0.25, { pts: e.pts, color: '#fff27a' }); break;
+        case 'pulse':
+          for (let i = 0; i < Math.min(8, 2 + e.r / 12); i++) this.parts.add({ kind: 'plus', x: e.x + (Math.random() - 0.5) * e.r, y: e.y + (Math.random() - 0.5) * e.r * 0.6, h: 8, vh: 50 + Math.random() * 30, life: 0.9, size: 3.2, color: hex(e.color) });
+          sfx('heal'); this.addFx('ring', 0.45, { x: e.x, y: e.y, r: e.r, color: hex(e.color), fill: true }); break;
+        case 'wave': this.addFx('ring', 0.6, { x: e.x, y: e.y, r: e.r, color: hex(e.color), fill: true }); this.shakeT = 0.15; this.focus(e.x, e.y, 1, 0.55, 1.2); break;
+        case 'lightning':
+          for (const [x, y] of e.pts) this.parts.burst(x, y, 16, 5, { kind: 'spark', color: '#fff27a', speed: 160, up: 120, g: 400, life: 0.3, size: 2.5 });
+          sfx('zap'); this.addFx('bolt', 0.25, { pts: e.pts, color: '#fff27a' }); break;
         case 'bolt': sfx('zap'); this.addFx('bolt', 0.3, { pts: [[e.x, e.y]], sky: true, color: '#fff27a', w: 4 }); break;
         case 'slash': this.addFx('slash', 0.25, { pts: e.pts }); break;
-        case 'gust': this.addFx('gust', 0.5, e); this.shakeT = 0.15; break;
+        case 'gust': this.addFx('gust', 0.5, e); this.shakeT = 0.15; this.focus(e.x + Math.cos(e.ang) * e.len * 0.4, e.y + Math.sin(e.ang) * e.len * 0.4, 1, 0.6, 1.3); break;
         case 'powder': this.addFx('ring', 0.8, { x: e.x, y: e.y, r: e.r, color: hex(e.color), fill: true }); break;
-        case 'meteor': sfx('whoosh'); this.addFx('meteor', e.dur, e); break;
-        case 'taunt': { const v = this.view(e.id); if (v) this.addFx('ring', 0.4, { follow: v.u, r: 30, color: '#ff3a3a' }); break; }
-        case 'roar': { const v = this.view(e.id); if (v) { sfx('roar'); cry(v.u.dex, { rate: 0.85, vol: 0.7 }); this.addFx('ring', 0.7, { x: v.u.x, y: v.u.y, r: 180, color: '#ff3a3a' }); this.floatText(v.u, 60, '¡FURIA!', '#ff4a3a', 26); this.shakeT = 0.3; } break; }
-        case 'teleport': this.addFx('ring', 0.3, { x: e.x0, y: e.y0, r: 16, color: '#ff9ae0' }); break;
-        case 'sing': { const v = this.view(e.id); if (v) { this.addFx('ring', 0.6, { x: v.u.x, y: v.u.y, r: 110, color: '#ffb6e0' }); this.floatText(v.u, 20, '♪', '#ff7ad8', 20); } break; }
+        case 'meteor': this.focus(e.x, e.y, 3, 0.55, 1.8); sfx('whoosh'); this.addFx('meteor', e.dur, e); break;
+        case 'taunt': { const v = this.view(e.id); if (v) { this.addFx('ring', 0.5, { follow: v.u, r: 40, color: '#ff3a3a' }); this.floatText(v.u, 30, '¡Eh!', '#ff6a5a', 15); this.parts.burst(v.u.x, v.u.y, 20, 6, { kind: 'spark', color: '#ff5a4a', speed: 110, up: 60, g: 0, life: 0.3, size: 2 }); } break; }
+        case 'roar': { const v = this.view(e.id); if (v) { this.focus(v.u.x, v.u.y, 2, 0.5, 1.6); sfx('roar'); cry(v.u.dex, { rate: 0.85, vol: 0.7 }); this.addFx('ring', 0.7, { x: v.u.x, y: v.u.y, r: 180, color: '#ff3a3a' }); this.floatText(v.u, 60, '¡FURIA!', '#ff4a3a', 26); this.shakeT = 0.3; } break; }
+        case 'teleport': {
+          this.addFx('ring', 0.35, { x: e.x0, y: e.y0, r: 22, color: '#ff9ae0' });
+          this.parts.burst(e.x0, e.y0, 12, 8, { kind: 'star', color: '#ffb0f0', speed: 70, up: 70, g: 0, life: 0.5, size: 2, drag: 2 });
+          const v = this.view(e.id);
+          if (v) this.later(0.02, () => this.parts.burst(v.u.x, v.u.y, 12, 8, { kind: 'star', color: '#ffb0f0', speed: 90, up: 70, g: 0, life: 0.5, size: 2, drag: 2 }));
+          break;
+        }
+        case 'sing': {
+          const v = this.view(e.id);
+          if (v) {
+            this.addFx('ring', 0.6, { x: v.u.x, y: v.u.y, r: 110, color: '#ffb6e0' });
+            for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; this.texts.push({ x: v.u.x + Math.cos(a) * 10, y: v.u.y + Math.sin(a) * 8, h: 22, str: i % 2 ? '♪' : '♫', color: '#ff7ad8', size: 18, t: 0, dx: Math.cos(a) * 40 }); }
+          }
+          break;
+        }
         case 'sleep': { const v = this.view(e.id); if (v) this.floatText(v.u, 24 * (v.u.side ? v.u.size : 1), 'Zz', '#cfd8ff', 16); break; }
-        case 'rage': { const v = this.view(e.id); if (v) this.floatText(v.u, 24, '!', '#ff6a3a', 18); break; }
-        case 'coin': this.floatText({ x: e.x, y: e.y, size: 1 }, 20, '₽', '#ffcb05', 16); break;
+        case 'rage': { const v = this.view(e.id); if (v) { this.floatText(v.u, 24, '!', '#ff6a3a', 20); this.parts.burst(v.u.x, v.u.y, 4, 7, { kind: 'dot', color: '#ff7a3a', speed: 40, up: 90, g: -40, life: 0.6, size: 2.4 }); } break; }
+        case 'coin': this.parts.add({ kind: 'coin', x: e.x, y: e.y, h: 20, vh: 200, g: 600, bounce: 0.4, vx: (Math.random() - 0.5) * 60, life: 1.1, size: 3.4 }); break;
         case 'equalize': { const a = this.view(e.a), b = this.view(e.b); if (a && b) this.addFx('bolt', 0.3, { pts: [[a.u.x, a.u.y], [b.u.x, b.u.y]], color: '#b78aff' }); break; }
-        case 'dig': this.addFx('ring', 0.4, { x: e.x, y: e.y, r: 10, color: '#8a5a2a', fill: true }); break;
-        case 'emerge': this.addFx('boom', 0.3, { x: e.x, y: e.y, r: 22, color: '#9a6a3a' }); break;
-        case 'revive': { const v = this.view(e.id); if (v) this.addFx('ring', 0.5, { x: v.u.x, y: v.u.y, r: 20, color: '#7dffd0', fill: true }); break; }
+        case 'dig': this.addFx('ring', 0.4, { x: e.x, y: e.y, r: 12, color: '#8a5a2a', fill: true }); this.parts.burst(e.x, e.y, 2, 8, { kind: 'dot', color: '#8a5a2a', speed: 70, up: 110, g: 400, life: 0.5, size: 2.4 }); break;
+        case 'emerge': this.addFx('boom', 0.3, { x: e.x, y: e.y, r: 26, color: '#9a6a3a' }); this.parts.burst(e.x, e.y, 2, 14, { kind: 'dot', color: '#a07040', speed: 120, up: 180, g: 500, life: 0.6, size: 3 }); this.shakeT = Math.max(this.shakeT, 0.1); break;
+        case 'revive': { const v = this.view(e.id); if (v) { this.addFx('ring', 0.5, { x: v.u.x, y: v.u.y, r: 20, color: '#7dffd0', fill: true }); this.parts.burst(v.u.x, v.u.y, 4, 6, { kind: 'star', color: '#ffffff', speed: 30, up: 120, g: 0, life: 0.7, size: 2 }); } break; }
         case 'flash': this.flashT = 0.3; this.flashColor = '160,255,160'; break;
         case 'sash': { const v = this.view(e.id); if (v) this.floatText(v.u, 20, '¡Aguanta!', '#ffffff', 12); break; }
         case 'charge': { const v = this.view(e.id); if (v) this.floatText(v.u, 34 * v.u.size, '¡Derribo!', '#ffd23a', 18); break; }
         case 'enrage': if (Math.round(e.level / 0.12) % 3 === 1) this.app.feed(`¡Los Pokémon salvajes se enfurecen! <b>Ataque +${Math.round(e.level * 100)}%</b>`, 'foe'); break;
         case 'thrown': sfx('throw'); break;
-        case 'ko': sfx('allyKo'); this.koCount++; break;
+        case 'ko': {
+          sfx('allyKo'); this.koCount++;
+          // sale despedido dando vueltas (sólo visual: en la simulación se queda donde cayó)
+          const v = this.view(e.id), src = e.from != null ? this.view(e.from) : null;
+          if (v) {
+            const a = src ? Math.atan2(v.u.y - src.u.y, v.u.x - src.u.x) : Math.random() * Math.PI * 2;
+            v.fly = { t: 0, dur: 0.55, dx: Math.cos(a) * 34, dz: Math.sin(a) * 24, h: 46 };
+            this.parts.burst(v.u.x, v.u.y, 10, 3, { kind: 'star', color: '#ffffff', speed: 60, up: 80, g: 200, life: 0.5, size: 1.8 });
+          }
+          break;
+        }
         case 'die': {
           const v = this.view(e.id);
           if (!v) break;
           sfx('faint');
           cry(v.u.dex, { rate: 0.75, vol: v.u.boss ? 0.7 : 0.3 });
+          this.koStreak(v.u);
+          // suelta monedas que saltan por el suelo
+          for (let i = 0, n = v.u.boss ? 14 : v.u.elite ? 6 : 2; i < n; i++) this.parts.add({ kind: 'coin', x: v.u.x, y: v.u.y, h: 20 * v.u.size, vx: (Math.random() - 0.5) * 120, vy: (Math.random() - 0.5) * 80, vh: 160 + Math.random() * 120, g: 600, bounce: 0.45, life: 1.4, size: 3.4 });
           // ¡puf! estrellitas y un aro al debilitarse
           const n = v.u.boss ? 16 : v.u.elite ? 10 : 6;
           this.addFx('poof', v.u.boss ? 1.1 : 0.6, { x: v.u.x, y: v.u.y, r: v.u.r * 1.8, h: 18 * v.u.size, parts: Array.from({ length: n }, (_, i) => ({ a: (i / n) * Math.PI * 2 + Math.random() * 0.5, sp: 0.6 + Math.random() * 0.6 })), color: v.u.boss ? '#ffb43a' : v.u.elite ? '#ffd21a' : '#ffffff' });
@@ -681,6 +797,50 @@ export class Battle3D {
           else this.feedLine(`¡${e.who} usó <b>${TRAIT_INFO[e.trait]?.[0] || e.trait}</b>!`, 'foe', e.key + e.trait, 3500);
           break;
       }
+    }
+  }
+
+  later(t, fn) { setTimeout(() => { if (!this.destroyed) fn(); }, t * 1000); }
+
+  // Racha de K.O.: rivales debilitados seguidos (menos de 1,2 s entre uno y otro)
+  koStreak(u) {
+    const now = performance.now();
+    const st = this.streak = (this.streak && now - this.streak.t < 1200 / Math.max(1, this.app.speed)) ? this.streak : { n: 0 };
+    st.n++; st.t = now; st.x = u.x; st.y = u.y;
+    if (st.n >= 3) {
+      sfx('combo');
+      this.comboText = { n: st.n, t: 0, x: u.x, y: u.y };
+    }
+  }
+
+  // Ambiente de cada acto: hojas, polvo, espuma, fuegos fatuos, polen, brillos de cristal
+  ambient(dt) {
+    const A = AMBIENT[this.act];
+    if (!A || this.parts.busy > 0.5) return;
+    this.ambT = (this.ambT || 0) + dt * A.rate;
+    while (this.ambT > 1) {
+      this.ambT -= 1;
+      const x = Math.random() * (this.W + 300) - 150, y = Math.random() * (this.H + 200) - 120;
+      this.parts.add({ ...A.p(), x, y });
+    }
+  }
+
+  // chispas del color del tipo en cada golpe; los críticos, estrellas y una micropausa
+  hitParticles(e) {
+    const v = this.view(e.id);
+    if (!v) return;
+    const u = v.u, P = this.parts;
+    const h = 14 * (u.side ? u.size : 1);
+    if (e.side === 1) {
+      const col = TYPES[e.type]?.color || '#ffffff';
+      if (e.crit) {
+        P.burst(u.x, u.y, h, 5, { kind: 'star', color: '#fff27a', speed: 140, up: 120, g: 380, life: 0.45, size: 3 });
+        if (this.sim.t - this.lastStop > 0.35 && e.dmg > u.maxHp * 0.08) { this.hitstop = 0.06; this.lastStop = this.sim.t; }
+      }
+      if (P.busy < 0.6 || Math.random() < 0.3) P.burst(u.x, u.y, h, e.crit ? 5 : 2, { kind: 'spark', color: col, speed: 150, up: 90, g: 350, life: 0.28, size: 2.2 });
+      if (e.type === 'poison' && Math.random() < 0.4) P.add({ kind: 'ring', x: u.x + (Math.random() - 0.5) * 12, y: u.y, h: h, vh: 30, life: 0.7, size: 2.5, color: '#c070f0' });
+    } else if (P.busy < 0.5 && Math.random() < 0.4) {
+      P.burst(u.x, u.y, 10, 1, { kind: 'dot', color: '#ffffff', speed: 70, up: 60, g: 300, life: 0.25, size: 1.8 });
     }
   }
 
@@ -714,6 +874,35 @@ export class Battle3D {
       this.dmgAcc.clear();
     }
 
+    // racha: «K.O. ×5» que crece con cada derrota
+    const cb = this.comboText;
+    if (cb) {
+      cb.t += dt;
+      if (cb.t > 1.4) this.comboText = null;
+      else {
+        const s = this.toScreen(cb.x, cb.y, 70);
+        const pop = cb.t < 0.15 ? 1 + (0.15 - cb.t) * 5 : 1;
+        c.save();
+        c.globalAlpha = Math.min(1, (1.4 - cb.t) * 3);
+        c.translate(s.x, s.y - cb.t * 14); c.scale(pop, pop);
+        c.font = `bold ${Math.round(26 * ts)}px "Power Clear Bold", sans-serif`;
+        c.textAlign = 'center'; c.lineWidth = 6; c.strokeStyle = '#283048';
+        const txt = `K.O. ×${cb.n}`;
+        c.strokeText(txt, 0, 0); c.fillStyle = cb.n >= 10 ? '#ff6a3a' : cb.n >= 5 ? '#ffcb05' : '#ffffff'; c.fillText(txt, 0, 0);
+        c.restore();
+      }
+    }
+    // tensión: pitido de PS bajos y música más rápida con la furia
+    if (!this.ended && !this.hold) {
+      const alive = this.sim.allies.filter(a => a.state !== 'ko').length / this.sim.allies.length;
+      if (alive < 0.2 && alive > 0 && (this.lowT = (this.lowT || 0) - dt) <= 0) { this.lowT = 1.1; sfx('lowhp'); }
+      const want = this.sim.enrage > 0.3 ? 1.06 : 1;
+      if (want !== this.rate) { this.rate = want; musicRate(want); }
+    }
+    this.ambient(dt);
+    // partículas (chispas, fuego, curas, monedas…)
+    this.parts.update(dt);
+    this.parts.draw(c, (x, y, h) => this.toScreen(x, y, h));
     // efectos
     this.fx = this.fx.filter(f => (f.t += dt) < f.dur);
     for (const f of this.fx) this.drawFx(c, f, f.t / f.dur);
@@ -789,6 +978,8 @@ export class Battle3D {
         const h = f.h0 * (1 - k) + Math.sin(k * Math.PI) * f.arc;
         const s = this.toScreen(x, y, h);
         const r = f.r * s.s * 1.4;
+        // estela
+        if (f.trail && Math.random() < 0.6) this.parts.add({ kind: 'dot', x, y, h, vh: 10, life: 0.3, size: f.r * 0.5, color: f.trail });
         c.fillStyle = f.color; c.beginPath(); c.arc(s.x, s.y, r, 0, 7); c.fill();
         c.fillStyle = 'rgba(255,255,255,.85)'; c.beginPath(); c.arc(s.x, s.y, r * 0.45, 0, 7); c.fill();
         if (f.star) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.arc(s.x, s.y, r + 3, 0, 7); c.stroke(); }
@@ -877,6 +1068,7 @@ export class Battle3D {
     this.root.classList.remove('killcam');
     document.body.classList.remove('killcam');
     this.root.dataset.field = '';
+    musicRate(1);
     window.removeEventListener('resize', this.onResize);
     if (this.renderer) {
       this.scene.traverse(o => { if (o.material) { o.material.map?.dispose?.(); o.material.dispose?.(); } o.geometry?.dispose?.(); });
@@ -889,6 +1081,16 @@ export class Battle3D {
 }
 
 // ---------- utilidades ----------
+const rnd = (a, b) => a + Math.random() * (b - a);
+const AMBIENT = {
+  0: { rate: 7, p: () => ({ kind: 'leaf', color: Math.random() < 0.5 ? '#6ab04a' : '#9ad06a', h: rnd(90, 180), vx: rnd(20, 45), vy: rnd(-5, 10), vh: rnd(-22, -12), life: 7, size: 2.2, spin: rnd(2, 5), alpha: 0.9 }) },
+  1: { rate: 6, p: () => ({ kind: 'dot', color: '#f0e0c0', h: rnd(10, 120), vx: rnd(-8, 8), vy: rnd(-6, 6), vh: rnd(-4, 6), life: 5, size: 1.2, alpha: 0.5 }) },
+  2: { rate: 5, p: () => ({ kind: 'dot', color: '#ffffff', h: rnd(2, 30), vx: rnd(-5, 5), vy: rnd(-3, 3), vh: rnd(8, 20), life: 1.6, size: 1.4, alpha: 0.7 }) },
+  3: { rate: 4, p: () => ({ kind: 'dot', color: Math.random() < 0.5 ? '#b890ff' : '#7ae0ff', h: rnd(10, 90), vx: rnd(-10, 10), vy: rnd(-6, 6), vh: rnd(4, 14), life: 4, size: 2.4, grow: 0.6, alpha: 0.55 }) },
+  4: { rate: 6, p: () => ({ kind: 'dot', color: '#fff2a0', h: rnd(20, 140), vx: rnd(10, 28), vy: rnd(-4, 4), vh: rnd(-6, 4), life: 6, size: 1.4, alpha: 0.75 }) },
+  5: { rate: 4, p: () => ({ kind: 'star', color: Math.random() < 0.5 ? '#7ad8ff' : '#e0b0ff', h: rnd(10, 120), vx: 0, vy: 0, vh: rnd(-3, 3), life: 2.2, size: 1.3, alpha: 0.85 }) },
+};
+
 function star(c, x, y, r, color) {
   c.fillStyle = color;
   c.beginPath();
