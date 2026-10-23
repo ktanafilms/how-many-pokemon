@@ -18,7 +18,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 let nextId = 1;
 
 export class Battle {
-  constructor({ allies, enemies, round = 0, powerScale = 1, arena = ARENA, enrage = { start: 35, every: 5 } }) {
+  constructor({ allies, enemies, round = 0, powerScale = 1, arena = ARENA, enrage = { start: 35, every: 5 }, field = {} }) {
     this.A = arenaBounds(arena.w, arena.h);
     this.t = 0;
     this.acc = 0;
@@ -39,6 +39,12 @@ export class Battle {
     for (const spec of allies) this.spawn(spec, 0, rattatas);
     for (const spec of enemies) this.spawn(spec, 1);
     this.focusedBoss = this.enemies.find(e => e.boss) || null;
+    // modificadores del campo (elegidos en el rancho)
+    this.field = field;
+    for (const u of this.units) {
+      if (field.frenzy) u.as *= 1.5;
+      if (field.swamp) u.spd *= 0.5;
+    }
   }
 
   stat(key) {
@@ -126,6 +132,8 @@ export class Battle {
       this.enrage += 0.12;
       this.emit('enrage', { level: this.enrage });
     }
+    // gas tóxico: todos pierden un poco de vida cada segundo
+    if (this.field.toxic) for (const u of this.units) if (this.alive(u)) this.damage(null, u, u.maxHp * 0.012 * dt, { dot: true });
     this.buildGrid();
     if (Math.floor(this.t * 2) !== Math.floor((this.t - dt) * 2)) this.slowTick();
 

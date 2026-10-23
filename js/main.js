@@ -10,7 +10,9 @@ import { RanchScene } from './scenes/RanchScene.js';
 import { BattleScene } from './scenes/BattleScene.js';
 import { renderRanch } from './ui/ranch.js';
 import * as EV from './ui/events.js';
-import { talk } from './ui/npc.js';
+import { talk, NPCS } from './ui/npc.js';
+import { bossCinematic } from './ui/cinematic.js';
+import { coach, tutorialSeen, RANCH_STEPS, BATTLE_STEPS } from './ui/tutorial.js';
 import { el, ui, tip } from './ui/html.js';
 import { ARENA } from './game/sim.js';
 import { Battle3D } from './three/Battle3D.js';
@@ -155,6 +157,7 @@ class App {
   async goRanch() {
     this.clearUI();
     const run = this.run;
+    R.ensureOptions(run);
     const r = R.currentRound(run);
     playMusic(`act${r.act}`);
     this.shownMoney = run.money;
@@ -172,20 +175,14 @@ class App {
     if (run.tutorial) {
       run.tutorial = false;
       R.save(run);
-      await wait(600);
-      await talk('oak', [
-        'Este es tu rancho. A la derecha puedes reclutar más Pokémon con tus ₽: ¡cuantos más, mejor!',
-        'Abajo verás a los rivales de la próxima ronda. Las flechas ▲ verdes te dicen qué especies son eficaces contra ellos.',
-        'Cuando estés listo, pulsa ¡A LUCHAR! El combate es automático, pero puedes usar objetos y acelerar el tiempo.',
-      ]);
+      await wait(700);
+      if (!tutorialSeen('ranch')) await coach('ranch', RANCH_STEPS);
     }
     if (r.type === 'jefe' && run.bossTalked !== run.round) {
       run.bossTalked = run.round;
       R.save(run);
       await wait(400);
-      const intro = bossIntro(run, r.act);
-      cry(ENEMIES[ACTS[r.act].boss].dex, { vol: 0.5 });
-      await talk(intro.npc, intro.lines);
+      await bossCinematic(this, r.act);
     }
     if (!run.eventDone) {
       const done = () => { run.eventDone = true; R.save(run); playMusic(`act${r.act}`); this.refreshRanch(true); };
@@ -244,20 +241,54 @@ class App {
     const boss = setup.enemies.find(e => e.boss);
     playMusic(boss ? (r.act === ACTS.length - 1 ? 'final' : 'boss') : 'battle');
     sfx('whoosh');
-    this.wipe(async () => {
+    this.vsIntro(setup, boss, async () => {
       this.clearUI();
       if (this.use3d) {
         for (const k of ['Ranch', 'Battle']) if (this.game.scene.isActive(k)) this.game.scene.stop(k);
         if (this.ranch3d) { this.ranch3d.destroy(); this.ranch3d = null; }
         this.b3d = new Battle3D(this, setup, r.act);
-        // la cortina no se abre hasta que el escenario está listo (nada de pantalla negra)
+        // la presentación no se abre hasta que el escenario está listo (nada de pantalla negra)
         await this.b3d.ready;
-        this.camHint();
       } else this.switchScene('Battle', { setup, act: r.act, app: this });
       this.renderHud();
-      this.banner(boss ? `¿Cuántos Pokémon hacen falta<small>para derrotar a ${boss.name}?</small>` : `¡Pokémon salvajes!<small>Ronda ${this.run.round + 1} · ${ACTS[r.act].name}</small>`);
-      this.hudFoes.forEach((f, i) => setTimeout(() => cry(f.dex, { vol: f.boss ? 0.6 : 0.4 }), 350 + i * 260));
+    }).then(() => {
+      this.b3d?.go();
+      if (this.use3d) this.camHint();
+      if (boss) this.banner(`¿Cuántos Pokémon hacen falta<small>para derrotar a ${boss.name}?</small>`);
+      // primer combate: el Prof. Oak explica los controles (con el combate en pausa)
+      if (!tutorialSeen('battle')) {
+        const sp = this.speed;
+        this.speed = 0;
+        setTimeout(() => coach('battle', BATTLE_STEPS).then(() => { this.speed = sp || 1; this.rerenderHud(); }), 900);
+      }
+      this.hudFoes.forEach((f, i) => setTimeout(() => cry(f.dex, { vol: f.boss ? 0.6 : 0.4 }), 150 + i * 260));
     });
+  }
+
+  // Presentación de combate estilo Pokémon: dos destellos y franjas VS con tus Pokémon contra los rivales.
+  // Tapa la carga del escenario y se abre cuando está listo (como mínimo 1,5 s para que dé tiempo a leerla).
+  async vsIntro(setup, boss, mid) {
+    const run = this.run;
+    const mine = Object.keys(run.team).filter(k => R.conscious(run, k) > 0).sort((a, b) => R.conscious(run, b) - R.conscious(run, a)).slice(0, 6);
+    const mon = (dex, n, i, big = false) => `<div class="vs-mon ${big ? 'big' : ''}" style="--i:${i}"><img class="px" src="${portrait(dex)}" alt=""><b>×${n}</b></div>`;
+    const r = R.currentRound(run);
+    const w = el(`<div class="vs-intro ${boss ? 'boss' : ''}">
+      <div class="vs-band mine"><div class="vs-row">${mine.map((k, i) => mon(R.speciesDex(run, k), R.conscious(run, k), i)).join('')}</div><div class="vs-total">Tu equipo · ${R.totalConscious(run)} Pokémon</div></div>
+      <div class="vs-mid"><span>VS</span></div>
+      <div class="vs-band foes">${boss ? `<img class="px vs-trainer" src="assets/npc/${NPCS[bossIntro(run, r.act).npc].img}.png" alt="">` : ''}<div class="vs-total">${boss ? `¡${NPCS[bossIntro(run, r.act).npc].name} saca a ${boss.name}!` : `¡${setup.enemies.length} Pokémon salvajes!`}<small>Ronda ${run.round + 1} · ${ACTS[r.act].name}${run.fightMod ? ` · ${R.FIGHT_MODS[run.fightMod]?.name || ''}` : ''}</small></div><div class="vs-row">${this.hudFoes.slice(0, 6).map((f, i) => mon(f.dex, f.n, i, f.boss)).join('')}</div></div>
+      <div class="vs-flash"></div>
+      <div class="vs-ball"><img class="px" src="assets/items/poke-ball.png" alt=""></div>
+    </div>`);
+    document.body.appendChild(w);
+    const t0 = performance.now();
+    await wait(420);
+    try { await mid(); } catch (e) { console.error(e); }
+    const left = 1500 - (performance.now() - t0);
+    if (left > 0) await wait(left);
+    sfx('whoosh');
+    w.classList.add('out');
+    setTimeout(() => w.remove(), 650);
+    await wait(250);
   }
 
   // Transición de combate estilo HGSS: franjas que barren la pantalla
@@ -286,6 +317,7 @@ class App {
         <div class="foe-chips">${this.hudFoes.map(f => `<div class="foe-chip ${f.boss ? 'boss' : ''}" data-foe="${f.key}" ${tip(`<h4>${f.name}</h4>${f.types.map(typeBadge).join('')}`)}><img class="px" src="${portrait(f.dex)}" alt=""><b data-n>${f.n}</b></div>`).join('')}</div>
       </div>
       <div class="feed" data-feed></div>
+      <div class="team-bars" data-teambars></div>
       <div class="hud-bottom panel">
         <div class="allies" ${tip('Tus Pokémon en pie / que empezaron el combate')}><img class="px icon mini" src="assets/items/poke-ball.png" alt=""><b data-allies>0</b><div class="allybar"><div data-allybar></div></div></div>
         ${slots.join('')}
@@ -360,6 +392,34 @@ class App {
     this.rerenderHud();
   }
 
+  // Vida de cada especie de tu equipo (pequeño, a un lado, como el resumen por tipo de Dude de HMD)
+  teamBars(hud, sim) {
+    const box = hud.querySelector('[data-teambars]');
+    if (!box) return;
+    const g = new Map();
+    for (const a of sim.allies) {
+      const e = g.get(a.key) || { key: a.key, dex: a.dex, hp: 0, max: 0, n: 0, alive: 0 };
+      e.max += a.maxHp;
+      e.n++;
+      if (a.state !== 'ko' && a.hp > 0) { e.hp += a.hp; e.alive++; }
+      g.set(a.key, e);
+    }
+    const list = [...g.values()].sort((a, b) => b.n - a.n);
+    if (box.childElementCount !== list.length) {
+      box.innerHTML = list.map(e => `<div class="tb" data-k="${e.key}"><img class="px" src="${portrait(e.dex)}" alt=""><div class="tb-bar"><i></i></div><b></b></div>`).join('');
+    }
+    for (const e of list) {
+      const row = box.querySelector(`[data-k="${e.key}"]`);
+      if (!row) continue;
+      const p = e.max ? e.hp / e.max : 0;
+      const bar = row.querySelector('i');
+      bar.style.width = `${p * 100}%`;
+      bar.className = p > 0.5 ? '' : p > 0.2 ? 'mid' : 'low';
+      row.querySelector('b').textContent = e.alive;
+      row.classList.toggle('dead', e.alive === 0);
+    }
+  }
+
   onBattleTick(sim) {
     const now = performance.now();
     if (now - (this.hudT || 0) < 120) return;
@@ -368,6 +428,7 @@ class App {
     if (!hud) return;
     const alive = sim.allies.filter(a => a.state !== 'ko').length;
     hud.querySelector('[data-allies]').textContent = `${alive}/${sim.allies.length}`;
+    this.teamBars(hud, sim);
     const ab = hud.querySelector('[data-allybar]');
     ab.style.width = `${(alive / sim.allies.length) * 100}%`;
     ab.parentElement.classList.toggle('danger', alive / sim.allies.length < 0.3);
@@ -453,31 +514,56 @@ class App {
   }
 
   soundPanel(anchor) {
-    document.querySelector('.sound-panel')?.remove();
+    // un segundo toque en el botón lo cierra
+    if (document.querySelector('.sound-panel')) { document.querySelector('.sound-panel').remove(); return; }
     const v = volumes();
     const p = el(`<div class="sound-panel panel">
-      <label>♪ Música <input type="range" min="0" max="1" step="0.05" value="${v.music}" data-m></label>
-      <label>🔊 Efectos <input type="range" min="0" max="1" step="0.05" value="${v.sfx}" data-s></label>
+      <h4>Sonido</h4>
+      <label>♪ Música <input type="range" min="0" max="1" step="0.05" value="${v.music}" data-m><button class="btn small mute ${v.music ? '' : 'on'}" data-mute="m">${v.music ? '🔈' : '🔇'}</button></label>
+      <label>🔊 Efectos <input type="range" min="0" max="1" step="0.05" value="${v.sfx}" data-s><button class="btn small mute ${v.sfx ? '' : 'on'}" data-mute="s">${v.sfx ? '🔈' : '🔇'}</button></label>
       <div class="toggle"><span>Combate</span><span><button class="btn small ${this.use3d ? 'on' : ''}" data-view="3d">2.5D</button> <button class="btn small ${this.use3d ? '' : 'on'}" data-view="2d">2D</button></span></div>
       <button class="btn small" data-x>Cerrar</button>
     </div>`);
-    const r = anchor.getBoundingClientRect();
-    p.style.top = `${Math.min(window.innerHeight - 160, r.bottom + 8)}px`;
-    p.style.left = `${Math.max(8, Math.min(window.innerWidth - 250, r.left - 100))}px`;
+    const last = { m: v.music || 0.5, s: v.sfx || 0.7 };
+    const muteBtn = (k, val) => { const b = p.querySelector(`[data-mute="${k}"]`); b.textContent = val ? '🔈' : '🔇'; b.classList.toggle('on', !val); };
     p.addEventListener('input', e => {
-      if (e.target.matches('[data-m]')) setMusic(+e.target.value);
-      if (e.target.matches('[data-s]')) { setSfx(+e.target.value); sfx('coin'); }
+      if (e.target.matches('[data-m]')) { setMusic(+e.target.value); muteBtn('m', +e.target.value); }
+      if (e.target.matches('[data-s]')) { setSfx(+e.target.value); muteBtn('s', +e.target.value); sfx('coin'); }
     });
     p.addEventListener('click', e => {
       if (e.target.closest('[data-x]')) p.remove();
+      const mb = e.target.closest('[data-mute]');
+      if (mb) {
+        const k = mb.dataset.mute, cur = k === 'm' ? volumes().music : volumes().sfx;
+        if (cur) last[k] = cur;
+        const nv = cur ? 0 : last[k];
+        if (k === 'm') setMusic(nv); else { setSfx(nv); sfx('coin'); }
+        p.querySelector(k === 'm' ? '[data-m]' : '[data-s]').value = nv;
+        muteBtn(k, nv);
+      }
       const vw = e.target.closest('[data-view]');
       if (vw) {
         this.use3d = vw.dataset.view === '3d';
         try { localStorage.setItem('how-many-pokemon-view', vw.dataset.view); } catch (err) { /* nada */ }
         p.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b === vw));
+        this.toast(this.use3d ? 'Los combates se verán en 2.5D' : 'Los combates se verán en 2D (más ligero)');
       }
     });
     document.body.appendChild(p);
+    // siempre dentro de la pantalla: debajo del botón si cabe, si no encima (teniendo en cuenta el zoom)
+    // (offsetWidth/Height: el rectángulo aún está encogido por la animación de entrada)
+    const r = anchor.getBoundingClientRect(), pr = { width: p.offsetWidth, height: p.offsetHeight };
+    let top = r.bottom + 8;
+    if (top + pr.height > window.innerHeight - 8) top = r.top - pr.height - 8;
+    top = Math.max(8, Math.min(window.innerHeight - pr.height - 8, top));
+    const left = Math.max(8, Math.min(window.innerWidth - pr.width - 8, r.left + r.width / 2 - pr.width / 2));
+    p.style.top = `${top}px`;
+    p.style.left = `${left}px`;
+    // tocar fuera lo cierra
+    setTimeout(() => {
+      const off = ev => { if (!p.isConnected) { document.removeEventListener('pointerdown', off, true); return; } if (!p.contains(ev.target) && !anchor.contains(ev.target)) { p.remove(); document.removeEventListener('pointerdown', off, true); } };
+      document.addEventListener('pointerdown', off, true);
+    }, 0);
   }
 }
 

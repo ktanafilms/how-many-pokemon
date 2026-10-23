@@ -85,6 +85,9 @@ export class Battle3D {
     this.root.appendChild(this.overlay);
     this.ctx = this.overlay.getContext('2d');
     this.root.classList.add('on');
+    // tinte del campo según el modificador elegido (gas tóxico, frenesí, pantano)
+    const f = this.sim.field || {};
+    this.root.dataset.field = f.toxic ? 'toxic' : f.frenzy ? 'frenzy' : f.swamp ? 'swamp' : '';
 
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -161,6 +164,11 @@ export class Battle3D {
     this.resize();
     this.onResize = () => this.resize();
     window.addEventListener('resize', this.onResize);
+    // compila los shaders y pinta un fotograma antes de mostrarse (así no se atasca al empezar)
+    this.hold = true;
+    try { await r.compileAsync(scene, this.camera); } catch (e) { /* navegador sin compilación asíncrona */ }
+    this.sync(0, 0);
+    r.render(scene, this.camera);
     this.last = performance.now();
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
@@ -172,9 +180,12 @@ export class Battle3D {
     const tex = this.sheets.get(u.dex).clone();
     const mat = new THREE.SpriteMaterial({ map: tex, alphaTest: 0.4, fog: true });
     const flash = { value: 0 };
+    // variocolor (shiny): se gira el tono de la paleta
+    const hue = { value: u.shiny ? 2.4 : 0 };
     mat.onBeforeCompile = sh => {
       sh.uniforms.uFlash = flash;
-      sh.fragmentShader = 'uniform float uFlash;\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), uFlash);');
+      sh.uniforms.uHue = hue;
+      sh.fragmentShader = 'uniform float uFlash;\nuniform float uHue;\nvec3 hueShift(vec3 c, float a) { const vec3 k = vec3(0.57735); float ca = cos(a); return c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca); }\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n if (uHue != 0.0) diffuseColor.rgb = clamp(hueShift(diffuseColor.rgb, uHue), 0.0, 1.0);\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), uFlash);');
     };
     const spr = new THREE.Sprite(mat);
     this.scene.add(spr);
@@ -187,7 +198,7 @@ export class Battle3D {
     };
     if (u.side) {
       // contorno rojo: copia de la silueta detrás, un poco más grande
-      const omat = new THREE.SpriteMaterial({ map: tex, alphaTest: 0.4, fog: true, color: u.boss ? 0xff7a1a : u.elite ? 0xffd21a : 0xff2a2a });
+      const omat = new THREE.SpriteMaterial({ map: tex, alphaTest: 0.4, fog: true, color: u.boss ? 0xff7a1a : u.elite || u.shiny ? 0xffd21a : 0xff2a2a });
       omat.onBeforeCompile = sh => {
         sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n diffuseColor.rgb = diffuse;');
       };
@@ -260,6 +271,15 @@ export class Battle3D {
     this.raf = requestAnimationFrame(this.loop);
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
+    // mientras dura la presentación VS sólo se pinta (nada se mueve)
+    if (this.hold) {
+      this.updateCamera(dt);
+      if (this.showcase) this.sync(dt, now / 1000);
+      this.renderer.render(this.scene, this.camera);
+      if (this.showcase) this.drawOverlay(dt, now / 1000);
+      this.app.onBattleTick(this.sim);
+      return;
+    }
     const speed = this.app.speed;
     this.checkKillcam(dt);
     // en la kill cam todo va a cámara lenta (como mucho a velocidad ×1)
@@ -288,6 +308,26 @@ export class Battle3D {
       } else this.endKillcam();
       setTimeout(() => this.app.onBattleEnd(this.sim), kc ? 2500 : 1300);
     }
+  }
+
+  // Empieza el combate (al terminar la presentación)
+  go() {
+    const boss = this.sim.enemies.find(e => e.boss);
+    if (!boss) { this.hold = false; this.last = performance.now(); return; }
+    // jefe: primer plano mientras ruge, luego la cámara se aleja y empieza el combate
+    const def = { ...this.camGoal };
+    this.showcase = true;
+    this.camGoal = { az: 0.18, pitch: 0.5, zoom: 0.5, px: boss.x - this.W / 2, pz: boss.y - this.H / 2 };
+    setTimeout(() => {
+      if (this.destroyed) return;
+      const v = this.view(boss.id);
+      sfx('roar');
+      cry(boss.dex, { rate: 0.9, vol: 0.8 });
+      this.shakeT = 0.6;
+      this.flashT = 0.2; this.flashColor = '255,255,255';
+      if (v) this.addFx('ring', 0.8, { x: boss.x, y: boss.y, r: 220, color: '#ffb43a' });
+    }, 700);
+    setTimeout(() => { if (this.destroyed) return; this.camGoal = def; this.hold = false; this.showcase = false; this.last = performance.now(); }, 2000);
   }
 
   // ---------- Kill cam: el último golpe de la ronda, de cerca y a cámara lenta ----------
@@ -367,6 +407,8 @@ export class Battle3D {
       }
       const x = u.x - W2, z = u.y - H2;
       v.spr.position.set(x, u.z + v.dropY, z);
+      // destellos de los variocolor
+      if (u.shiny && Math.random() < dt * 1.2) this.floatText(u, 26 * u.size + Math.random() * 20, '✦', '#fff27a', 14);
       // al ganar, tus Pokémon dan saltitos de alegría (como los Dudes de HMD)
       if (this.sim.result === 'win' && !u.side && u.state !== 'ko') v.spr.position.y += Math.abs(Math.sin(clock * 7 + u.id * 1.7)) * 12;
       // dirección relativa a la cámara
@@ -834,6 +876,7 @@ export class Battle3D {
     cancelAnimationFrame(this.raf);
     this.root.classList.remove('killcam');
     document.body.classList.remove('killcam');
+    this.root.dataset.field = '';
     window.removeEventListener('resize', this.onResize);
     if (this.renderer) {
       this.scene.traverse(o => { if (o.material) { o.material.map?.dispose?.(); o.material.dispose?.(); } o.geometry?.dispose?.(); });

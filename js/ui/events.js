@@ -162,11 +162,31 @@ export function daycareModal(app, done) {
   const body = () => `
     <div class="lead">Precio por Rattata: ${money(offer.price)} · Rattatas disponibles: <b>${free}</b> · Tienes ${money(run.money)}</div>
     <div class="cards">${offer.opts.map(k => speciesCard(k, '', run).replace('class="card"', `class="card ${chosen === k ? 'sel' : ''}"`)).join('')}</div>
-    <div class="slider-row"><span>Enviar</span><input type="range" min="0" max="${max}" value="${n}" data-n><b>${n}</b> Rattatas = ${money(n * offer.price)} <span class="muted">→ vuelven en ${offer.rounds} rondas</span></div>
+    <div class="stepper-row">${stepper()}</div>
     <div class="actions"><button class="btn green" data-send ${n > 0 ? '' : 'disabled'}>¡A ENTRENAR!</button><button class="btn red" data-close>Ahora no</button></div>`;
+  // selector con botones (− / +) en vez de barra deslizante
+  const stepper = () => `<span>Enviar</span>
+    <button class="btn small step" data-step="-5" ${n <= 0 ? 'disabled' : ''}>−5</button>
+    <button class="btn small step" data-step="-1" ${n <= 0 ? 'disabled' : ''}>−</button>
+    <b class="step-n">${n}</b>
+    <button class="btn small step" data-step="1" ${n >= max ? 'disabled' : ''}>+</button>
+    <button class="btn small step" data-step="5" ${n >= max ? 'disabled' : ''}>+5</button>
+    <button class="btn small step" data-step="max" ${n >= max ? 'disabled' : ''}>Máx</button>
+    <span>Rattatas = ${money(n * offer.price)}</span> <span class="muted">→ vuelven en ${offer.rounds} rondas</span>`;
+  const updStepper = () => {
+    m.querySelector('.stepper-row').innerHTML = pd(stepper());
+    const b = m.querySelector('[data-send]');
+    if (b) b.disabled = n <= 0;
+  };
   const m = scene('breeder', `¡Tienes un MONTÓN de Rattatas sin hacer nada! Déjamelos ${offer.rounds} rondas y volverán… DIFERENTES. Elige en qué quieres que se conviertan.`, body(), { onClose: done });
-  m.addEventListener('input', e => { if (e.target.matches('[data-n]')) { n = +e.target.value; rebody(m, body()); m.querySelector('[data-n]').focus(); } });
   m.addEventListener('click', e => {
+    const st = e.target.closest('[data-step]');
+    if (st) {
+      n = st.dataset.step === 'max' ? max : Math.max(0, Math.min(max, n + +st.dataset.step));
+      sfx('click');
+      updStepper();
+      return;
+    }
     const c = e.target.closest('[data-k]');
     if (c) { sfx('select'); chosen = c.dataset.k; rebody(m, body()); return; }
     if (e.target.closest('[data-send]')) {

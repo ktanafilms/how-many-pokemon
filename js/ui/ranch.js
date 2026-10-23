@@ -79,6 +79,7 @@ export function renderRanch(app) {
       <div class="map panel">
         <div class="rounds">${rounds}</div>
         <div class="next-line"><b>${info.name}:</b> ${info.desc}</div>
+        ${fightOptions(run)}
         <div class="foes">${foesPreview(run)}</div>
         ${adviceLine(run)}
       </div>
@@ -108,6 +109,17 @@ export function renderRanch(app) {
         if (R.useRanchConsumable(run, +c.dataset.cons)) { sfx('heal'); app.toast('¡Tus Pokémon se han recuperado!'); app.refreshRanch(true); }
         else { sfx('error'); app.toast('No hay Pokémon debilitados'); }
       }
+      return;
+    }
+    const o = e.target.closest('[data-opt]');
+    if (o) {
+      if (+o.dataset.opt === run.optIdx) return;
+      sfx('select');
+      R.chooseFight(run, +o.dataset.opt);
+      R.save(run);
+      const main = R.fightTitle(run.options[run.optIdx]).main;
+      cry(ENEMIES[main].dex, { vol: 0.35 });
+      app.refreshRanch(false);
       return;
     }
     const a = e.target.closest('[data-act]');
@@ -187,6 +199,24 @@ export function foeTip(run, k) {
   return `<h4>${e.name}${e.boss ? ' 👑' : ''}</h4>${types(e.types)}
     <div class="stats"><span>❤️ PS ${Math.round(st.hp)}</span><span>⚔️ ATQ ${Math.round(st.atk)}</span></div>
     ${weak ? `<div class="tip-good">💥 Débil a: <b>${weak}</b></div>` : ''}${resist ? `<div class="tip-bad">🛡 Resiste: ${resist}</div>` : ''}${traits}`;
+}
+
+// Elegir combate (como en HMD): cada opción con su modificador y su premio extra
+function fightOptions(run) {
+  if (!run.options || run.options.length < 2) return '';
+  const cards = run.options.map((o, i) => {
+    const t = R.fightTitle(o);
+    const mods = o.mods.filter(m => m !== 'normal').map(m => R.FIGHT_MODS[m]);
+    const desc = mods.length ? mods.map(m => `<div><b>${m.name}:</b> ${m.desc}</div>`).join('') : R.FIGHT_MODS.normal.desc;
+    const shiny = o.mods.includes('shiny') ? 'shiny' : '';
+    return `<button class="fopt ${i === run.optIdx ? 'on' : ''} ${shiny}" data-opt="${i}" ${tip(`<h4>${t.text}</h4>${desc}`)}>
+      ${img(ENEMIES[t.main].dex, o.mods.includes('gigantes') ? 'giant' : o.mods.includes('horda') ? 'tiny' : '')}
+      <span class="fo-txt"><b>${t.text}</b><small>${mods.length ? mods.map(m => `<img class="px icon mini" src="assets/items/${m.icon}.png" alt="">${m.name}`).join(' · ') : 'Sin sorpresas'}</small></span>
+      <span class="fo-short">×${o.enemies.length}${mods.map(m => `<img class="px icon mini" src="assets/items/${m.icon}.png" alt="">`).join('')}</span>
+      ${o.bonus ? `<span class="fo-bonus">+${Math.round(o.bonus * 100)}% ₽</span>` : ''}
+    </button>`;
+  }).join('');
+  return `<div class="fight-opts"><span class="fo-label">Elige combate:</span>${cards}</div>`;
 }
 
 function foesPreview(run) {

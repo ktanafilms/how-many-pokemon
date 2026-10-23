@@ -181,10 +181,79 @@ export function prepareRound(run) {
   const r = currentRound(run);
   if (!r) return;
   run.challenge = false;
-  run.enemies = generateEnemies(run.round, r, tierMods(run));
   // Pokémon Alfa: más grandes, más duros y con un rasgo extra
   const alpha = r.type === 'jefe' || r.act === 0 ? 0 : 0.03 + 0.025 * r.act + (tierMods(run).alpha || 0);
-  run.elite = run.enemies.map(() => Math.random() < alpha);
+  const make = mods => {
+    const enemies = applyFightMods(generateEnemies(run.round, r, tierMods(run)), mods);
+    return { mods, enemies, elite: enemies.map(() => Math.random() < alpha), bonus: mods.reduce((s, m) => s + FIGHT_MODS[m].bonus, 0) };
+  };
+  // como en HMD: en las rondas normales eliges entre varios combates (desde la 2.ª ronda)
+  run.options = [make(['normal'])];
+  if (r.type !== 'jefe' && run.round >= 1) {
+    const pool = shuffle(Object.keys(FIGHT_MODS).filter(k => k !== 'normal' && (FIGHT_MODS[k].from || 0) <= run.round));
+    for (const k of pool.slice(0, 2)) {
+      const mods = [k];
+      // a veces se combinan: «2 Beedrill gigantes variocolor», «horda enana con frenesí»…
+      const extra = pick(FIGHT_COMBOS[k] || []);
+      if (extra && Math.random() < 0.35 && (FIGHT_MODS[extra].from || 0) <= run.round) mods.push(extra);
+      run.options.push(make(mods));
+    }
+  }
+  chooseFight(run, 0);
+}
+
+// ---------- Modificadores de combate (como los de las arenas y combates de HMD) ----------
+export const FIGHT_MODS = {
+  normal:   { name: 'Combate normal', icon: 'poke-ball', desc: 'Los rivales de siempre.', bonus: 0 },
+  horda:    { name: 'Horda enana', icon: 'great-ball', desc: 'El triple de rivales… pero diminutos y frágiles.', bonus: 0.25 },
+  gigantes: { name: 'Gigantes', icon: 'hard-stone', desc: 'Pocos rivales ENORMES: ×5 PS y ×2 ATQ.', bonus: 0.3 },
+  shiny:    { name: 'Variocolor', icon: 'star-piece', desc: 'Pokémon shiny, más duros… ¡y dan el doble de ₽!', bonus: 1, from: 2 },
+  frenesi:  { name: 'Frenesí', icon: 'quick-claw', desc: 'Todos (tus Pokémon también) atacan un 50% más rápido.', bonus: 0.15, field: true },
+  toxico:   { name: 'Gas tóxico', icon: 'poison-barb', desc: 'Todos pierden PS poco a poco: ¡gana rápido!', bonus: 0.25, field: true, from: 3 },
+  pantano:  { name: 'Pantano', icon: 'soft-sand', desc: 'Todos se mueven a la mitad de velocidad.', bonus: 0.1, field: true },
+  tenaces:  { name: 'Tenaces', icon: 'leftovers', desc: 'Los rivales se regeneran durante el combate.', bonus: 0.2, from: 4 },
+};
+const FIGHT_COMBOS = { gigantes: ['shiny', 'frenesi'], horda: ['frenesi', 'pantano'], shiny: ['gigantes', 'horda'], toxico: ['horda'], tenaces: ['gigantes'] };
+
+function applyFightMods(list, mods) {
+  if (mods.includes('horda')) {
+    // la especie más barata de la lista, multiplicada
+    const cheap = list.slice().sort((a, b) => ENEMIES[a].cost - ENEMIES[b].cost)[0];
+    list = [...list, ...list, ...Array(list.length).fill(cheap)].slice(0, 160);
+  }
+  if (mods.includes('gigantes')) {
+    const big = list.slice().sort((a, b) => ENEMIES[b].cost - ENEMIES[a].cost)[0];
+    list = Array(Math.max(1, Math.round(list.length / 5))).fill(big);
+  }
+  return list;
+}
+
+// Título corto de una opción: «2 Beedrill gigantes variocolor», «48 Weedle enanos»…
+export function fightTitle(opt) {
+  const counts = {};
+  for (const k of opt.enemies) counts[k] = (counts[k] || 0) + 1;
+  const [main, n] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  const adj = [opt.mods.includes('gigantes') ? (n > 1 ? 'gigantes' : 'gigante') : '', opt.mods.includes('horda') ? (n > 1 ? 'enanos' : 'enano') : '', opt.mods.includes('shiny') ? 'variocolor' : ''].filter(Boolean).join(' ');
+  const others = opt.enemies.length - n;
+  return { main, text: `${n} ${ENEMIES[main].name}${adj ? ' ' + adj : ''}${others ? ` y ${others} más` : ''}` };
+}
+
+// Partidas guardadas antes de existir la elección de combate
+export function ensureOptions(run) {
+  if (run.options) return;
+  run.options = [{ mods: ['normal'], enemies: run.enemies || [], elite: run.elite || [], bonus: 0 }];
+  run.optIdx = 0;
+  run.fightMods = ['normal'];
+}
+
+export function chooseFight(run, i) {
+  const o = run.options?.[i];
+  if (!o) return;
+  run.optIdx = i;
+  run.enemies = o.enemies;
+  run.elite = o.elite;
+  run.fightMods = o.mods;
+  run.fightMod = o.mods.find(m => m !== 'normal') || null;
 }
 
 function enemyScale(round) {
@@ -226,7 +295,7 @@ export function generateEnemies(round, r, mods = {}) {
   return list;
 }
 
-export function enemyStats(key, round, elite = false, mods = {}) {
+export function enemyStats(key, round, elite = false, mods = {}, fm = []) {
   const e = ENEMIES[key];
   const sc = enemyScale(round);
   const st = {
@@ -240,6 +309,12 @@ export function enemyStats(key, round, elite = false, mods = {}) {
     Object.assign(st, { elite: true, name: `${e.name} Alfa`, hp: st.hp * 3.2, atk: st.atk * 1.45, as: st.as * 1.15, size: e.size * 1.35, crit: 0.15, tough: Math.max(st.tough, 0.15) });
     st.traits = [...new Set([...st.traits, 'primal', 'stable'])];
   }
+  if (!st.boss) {
+    if (fm.includes('horda')) Object.assign(st, { hp: st.hp * 0.32, atk: st.atk * 0.45, size: st.size * 0.62 });
+    if (fm.includes('gigantes')) Object.assign(st, { hp: st.hp * 5, atk: st.atk * 2.2, as: st.as * 0.8, size: Math.min(3.2, st.size * 2.1), traits: [...new Set([...st.traits, 'stable'])] });
+    if (fm.includes('shiny')) Object.assign(st, { hp: st.hp * 1.8, atk: st.atk * 1.3, shiny: true, name: `${st.name} ✨` });
+    if (fm.includes('tenaces')) st.regen = 0.012;
+  }
   return st;
 }
 
@@ -252,8 +327,10 @@ export function battleSetup(run) {
     for (let i = 0; i < n; i++) allies.push({ ...st });
   }
   const m = tierMods(run);
-  const enemies = run.enemies.map((k, i) => enemyStats(k, run.round, run.elite?.[i], m));
-  return { allies, enemies, round: run.round, enrage: { start: m.enrageStart ?? 35, every: m.enrageEvery ?? 5 } };
+  const fm = run.fightMods || [];
+  const enemies = run.enemies.map((k, i) => enemyStats(k, run.round, run.elite?.[i], m, fm));
+  const field = { frenzy: fm.includes('frenesi'), toxic: fm.includes('toxico'), swamp: fm.includes('pantano') };
+  return { allies, enemies, round: run.round, field, enrage: { start: m.enrageStart ?? 35, every: m.enrageEvery ?? 5 } };
 }
 
 // ---------- Resultado del combate ----------
@@ -291,7 +368,7 @@ export function applyBattle(run, battle) {
   const killValue = run.enemies.reduce((s, k, i) => s + (ENEMIES[k].cost || 10) * (run.elite?.[i] ? 3 : 1), 0);
   const persian = (run.spec.meowth?.stage || 0) >= 1;
   res.payday = battle.stats.meowth ? battle.stats.meowth.n * (persian ? 7 : 4) : 0;
-  res.money = Math.round((18 + 7 * (run.round + 1) + killValue * 1.4) * (1 + (g.money || 0)) * (run.challenge ? 1.5 : 1)) + res.payday;
+  res.money = Math.round((18 + 7 * (run.round + 1) + killValue * 1.4) * (1 + (g.money || 0)) * (run.challenge ? 1.5 : 1) * (1 + (run.options?.[run.optIdx]?.bonus || 0))) + res.payday;
   run.money += res.money;
   run.lastResult = res;
   return res;
@@ -358,8 +435,12 @@ export function acceptChallenge(run) {
   const r = currentRound(run);
   run.challenge = true;
   const extra = generateEnemies(run.round, r, { foes: 0.6 });
+  run.options = [run.options[run.optIdx || 0]];
+  run.optIdx = 0;
   run.enemies = [...run.enemies, ...extra.slice(0, Math.ceil(extra.length * 0.6))];
+  run.options[0].enemies = run.enemies;
   run.elite = run.enemies.map((_, i) => run.elite?.[i] || Math.random() < 0.18);
+  run.options[0].elite = run.elite;
 }
 
 export function vitaminOffer(run) {

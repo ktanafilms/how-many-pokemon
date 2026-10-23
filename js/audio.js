@@ -35,7 +35,9 @@ function unlock() {
 // ---------- Música ----------
 function fade(el, to, ms, done) {
   const from = el.volume, t0 = performance.now();
+  const id = (el._fade = (el._fade || 0) + 1);
   const step = () => {
+    if (el._fade !== id) return; // otro fundido o un cambio de volumen lo ha sustituido
     const k = Math.min(1, (performance.now() - t0) / ms);
     el.volume = Math.max(0, Math.min(1, from + (to - from) * k));
     if (k < 1) requestAnimationFrame(step); else done && done();
@@ -181,7 +183,7 @@ export function sfx(name) {
 export const volumes = () => ({ ...state });
 export function setMusic(v) {
   state.music = v;
-  if (current) current.el.volume = v;
+  if (current) { current.el._fade = (current.el._fade || 0) + 1; current.el.volume = v; }
   savePrefs();
 }
 export function setSfx(v) {
