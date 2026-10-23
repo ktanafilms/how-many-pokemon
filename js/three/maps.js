@@ -8,9 +8,9 @@ export const MAPS = {
   // floor 'map': el suelo de la arena es el del propio mapa (se aplana lo que sobresale)
   // floor 'own': se abre un hueco y se ve el suelo propio de la arena
   0: { dir: 'act0', filler: 'trees', offset: [0, 0.18], floor: 'map' },  // Bosque Verde ← Viridian Forest
-  1: { dir: 'act1', filler: 'trees', offset: [0, 0], floor: 'own', auto: true, ownTex: /^road01\./ },         // Monte Moon ← Mt. Moon Square
+  1: { dir: 'mtmoon1', filler: null, offset: [0, 0], floor: 'own', auto: true, ownTex: /^droad01\./ },         // Monte Moon ← Mt. Moon Square
   2: { dir: null, filler: 'sea', offset: [0, 0], floor: 'own' },        // Costa Celeste: playa propia en mitad del mar
-  3: { dir: 'act3', filler: 'trees', offset: [0, -0.05], floor: 'own', auto: true, ownTex: /^fs_a/ },     // Torre Pokémon ← Pueblo Lavanda
+  3: { dir: 'act3', filler: 'trees', offset: [0, -0.05], floor: 'map' },     // Torre Pokémon ← Pueblo Lavanda
   4: { dir: 'act4', filler: 'trees', offset: [0, 0], floor: 'map' },      // Zona Safari ← Safari (bosque)
   5: { dir: 'act5', filler: null, offset: [0, 0], floor: 'own', auto: true, maxScale: 2.4, ownTex: /^droad01\./ },         // Cueva Celeste ← Cueva Celeste 1F
 };
@@ -110,6 +110,25 @@ function plainTexture(tex) {
 
 // Máscara de borde irregular: dentro de la arena todo; en el margen de fuera, casillas sueltas al azar
 // (debajo de la arena el mapa está recortado, así que ahí no puede haber huecos)
+// Borde de la isla de Costa Celeste: casillas sueltas en los bordes de fuera (como la arena de HGSS)
+export function islandMask(w, h, tile = 32) {
+  const nx = Math.ceil(w / tile), nz = Math.ceil(h / tile);
+  const cv = document.createElement('canvas');
+  cv.width = nx; cv.height = nz;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, nx, nz);
+  g.fillStyle = '#000';
+  for (let z = 0; z < nz; z++) for (let x = 0; x < nx; x++) {
+    const d = Math.min(x, nx - 1 - x, nz - 1 - z);
+    if (d === 0 && Math.random() < 0.55) g.fillRect(x, z, 1, 1);
+    else if (d === 1 && Math.random() < 0.15) g.fillRect(x, z, 1, 1);
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.magFilter = t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  return t;
+}
+
 function jaggedMask(w, h, tile, iw, ih) {
   const nx = Math.ceil(w / tile), nz = Math.ceil(h / tile);
   const cv = document.createElement('canvas');

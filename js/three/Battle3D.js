@@ -7,7 +7,7 @@ import { TRAIT_INFO } from '../data/species.js';
 import { MANIFEST, animDuration } from '../scenes/anims.js';
 import { sfx, cry, musicRate } from '../audio.js';
 import { buildEnvironment } from './env.js';
-import { addMap, MAPS } from './maps.js';
+import { addMap, MAPS, islandMask } from './maps.js';
 import { Particles } from './particles.js';
 import { TYPES } from '../data/types.js';
 
@@ -127,10 +127,14 @@ export class Battle3D {
     if (mapInfo?.island) {
       og.geometry.dispose();
       // (al norte no: allí la arena ya acaba en la orilla)
-      og.geometry = new THREE.PlaneGeometry(W + 520, H + 190);
-      base.repeat.set((W + 520) / 32, (H + 190) / 32);
-      og.position.set(0, -0.6, 125);
-      og.material.color.set(0xffffff);
+      // empieza por debajo de la orilla de la arena (si no, habría arena junto al agua) y con el borde irregular
+      const iw = W + 512, ih = H + 128;
+      og.geometry = new THREE.PlaneGeometry(iw, ih);
+      base.repeat.set(iw / 32, ih / 32);
+      og.position.set(0, -0.6, -H / 2 + 80 + ih / 2);
+      og.material.color.setRGB(0.89, 0.92, 1.0); // mismo tono que la arena de combate
+      og.material.alphaMap = islandMask(iw, ih);
+      og.material.alphaTest = 0.5;
     }
     if (!mapInfo?.mapGround) scene.add(og); // con suelo del mapa, éste ya se extiende hasta el horizonte
 

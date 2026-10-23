@@ -16,11 +16,12 @@ export function bossCinematic(app, act) {
   const bossKey = ACTS[act].boss;
   const boss = ENEMIES[bossKey];
   const n = NPCS[intro.npc];
-  const big = window.innerWidth < 600 ? 5 : 8;
+  const big = window.innerWidth < 600 ? 6 : Math.min(12, Math.round(window.innerHeight / 70));
   const root = el(`<div class="cine act${act}">
     <div class="cine-bar top"></div><div class="cine-bar bot"></div>
-    <div class="cine-band"><div class="cine-trainer"><img class="px" src="assets/npc/${n.img}.png" alt=""></div>
-      <div class="cine-name"><small>${TITLES[intro.npc] || ''}</small>${n.name}</div></div>
+    <div class="cine-band"></div>
+    <div class="cine-trainer"><img class="px" src="assets/npc/${n.img}.png" alt=""></div>
+    <div class="cine-name"><small>${TITLES[intro.npc] || ''}</small>${n.name}</div>
     <div class="cine-boss">${spriteHTML(boss.dex, big, 'Idle', 'cine-sil')}<div class="cine-bname"><small>Jefe del ${ACTS[act].name}</small>${boss.name}</div></div>
     <div class="cine-talk"><div class="cine-text"></div><span class="cine-next">▼</span></div>
     <button class="btn small cine-skip">Saltar ▶▶</button>

@@ -761,3 +761,40 @@ body.killcam .team-bars { opacity: 0; }
 /* con zoom, los vh también se escalan: se compensa para usar toda la altura */
 .modal { max-height: calc(92vh / var(--z, 1)); }
 .dex-modal { max-height: calc(88vh / var(--z, 1)); }
+/* sin barras de desplazamiento en las ventanas: se encogen para caber (ver fitModal) */
+.dex-modal { max-height: none !important; }
+.dex-body { overflow: visible; }
+.modal-back { overflow: hidden; }
+/* Pokédex más ancha y celdas más compactas (cabe sin encogerse tanto) */
+.dex-modal { width: min(1160px, 96vw); }
+.dex-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; }
+.dex-cell { padding: 4px 2px; font-size: 12px; }
+.dex-cell img { width: 40px; height: 40px; }
+
+/* Presentación del líder: figura grande al estilo de los juegos */
+.cine-trainer { top: auto; bottom: 8vh; left: 3vw; }
+.cine-trainer img { height: min(82vh, 62vw); filter: brightness(0) drop-shadow(0 0 0 #fff); }
+.cine.lit .cine-trainer img { filter: drop-shadow(10px 10px 0 rgba(0,0,0,.4)); }
+.cine-band { top: 24vh; height: 40vh; }
+.cine-name { top: 28vh; right: 6vw; font-size: clamp(42px, 8vw, 120px); }
+.cine.t2 .cine-trainer { transform: translateX(-10vw) scale(.9); transform-origin: bottom left; filter: brightness(.7); }
+.cine-boss { right: 6vw; top: 44vh; }
+.cine-talk { z-index: 7; }
+@media (max-width: 900px) and (orientation: portrait), (max-width: 560px) {
+  .cine-trainer { bottom: 22vh; left: -4vw; } .cine-trainer img { height: 52vh; }
+  .cine-band { top: 16vh; height: 30vh; } .cine-name { top: 18vh; font-size: 40px; }
+}
+.cine-boss { flex-direction: column-reverse; top: 40vh; }
+.cine-bname { margin: 0 0 6px; }
+.cine-boss { flex-direction: column; top: 38vh; }
+.cine-bname { margin: 6px 0 0; }
+.cine-boss { top: 47vh; }
+.cine-boss { top: 40vh; }
+.cine-bname { position: absolute; right: 92%; bottom: 18%; margin: 0; text-align: right; white-space: nowrap; }
+@media (max-width: 900px) and (orientation: portrait), (max-width: 560px) { .cine-bname { right: auto; left: 50%; bottom: -18px; transform: translateX(-50%); text-align: center; } }
+@media (max-width: 900px) and (orientation: portrait), (max-width: 560px) {
+  .cine-boss { right: 4vw; left: auto; top: 50vh; transform: translateY(-50%) scale(.4); }
+  .cine.t2 .cine-boss { transform: translateY(-50%) scale(1); }
+  .cine-bname { left: auto; right: 0; bottom: -26px; transform: none; text-align: right; font-size: 26px; }
+  .cine-trainer { bottom: 26vh; } .cine-trainer img { height: 46vh; }
+}
