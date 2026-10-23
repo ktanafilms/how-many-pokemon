@@ -207,6 +207,111 @@ function heightGrid(obj, cell) {
   return { nx, nz, hi, lo, box, cell };
 }
 
+// ---------- Piezas sueltas de los mapas de HGSS ----------
+// Las rocas del mar y de tierra vienen fundidas en la malla del terreno: se separan por material
+// y por triángulos conectados. Cada pieza queda centrada en su base.
+const pieceCache = new Map();
+function pieces(dir, re) {
+  const key = dir + re;
+  if (!pieceCache.has(key)) pieceCache.set(key, loadDae(dir).then(sc => {
+    sc.updateMatrixWorld(true);
+    const out = [];
+    const v = new THREE.Vector3();
+    sc.traverse(o => {
+      if (!o.isMesh) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      const geo = o.geometry, pos = geo.attributes.position, uv = geo.attributes.uv, idx = geo.index;
+      const groups = geo.groups.length ? geo.groups : [{ start: 0, count: idx ? idx.count : pos.count, materialIndex: 0 }];
+      for (const g of groups) {
+        const m = mats[g.materialIndex || 0];
+        if (!re.test(m?.name || '')) continue;
+        // unión de triángulos que comparten vértices (misma posición)
+        const ids = new Map(), parent = [];
+        const find = a => { while (parent[a] !== a) a = parent[a] = parent[parent[a]]; return a; };
+        const tris = [];
+        for (let i = g.start; i < g.start + g.count; i += 3) {
+          const t = [0, 1, 2].map(k => idx ? idx.getX(i + k) : i + k);
+          // cada roca ocupa una casilla de 16: se agrupa por casilla (centro del triángulo) y vértices compartidos
+          let cx = 0, cz = 0;
+          for (const vi of t) { v.fromBufferAttribute(pos, vi).applyMatrix4(o.matrixWorld); cx += v.x / 3; cz += v.z / 3; }
+          const tile = `${Math.floor(cx / 32)},${Math.floor(cz / 32)}`;
+          const ks = t.map(vi => { v.fromBufferAttribute(pos, vi).applyMatrix4(o.matrixWorld); return `${tile}|${v.x.toFixed(1)},${v.y.toFixed(1)},${v.z.toFixed(1)}`; });
+          const ns = ks.map(k => { if (!ids.has(k)) { ids.set(k, parent.length); parent.push(parent.length); } return ids.get(k); });
+          parent[find(ns[1])] = find(ns[0]); parent[find(ns[2])] = find(ns[0]);
+          tris.push({ t, n: ns[0] });
+        }
+        const comps = new Map();
+        for (const tr of tris) { const r = find(tr.n); if (!comps.has(r)) comps.set(r, []); comps.get(r).push(tr.t); }
+        for (const list of comps.values()) {
+          const P = [], U = [];
+          for (const t of list) for (const vi of t) {
+            v.fromBufferAttribute(pos, vi).applyMatrix4(o.matrixWorld);
+            P.push(v.x, v.y, v.z);
+            if (uv) U.push(uv.getX(vi), uv.getY(vi));
+          }
+          const bg = new THREE.BufferGeometry();
+          bg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+          if (uv) bg.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+          bg.computeBoundingBox();
+          const b = bg.boundingBox, sz = b.getSize(v.clone());
+          // sólo objetos completos y "macizos": fuera bordes, sombras y esquirlas finas
+          // (las rocas de HGSS son cuadros inclinados hacia la cámara: piezas de 2 triángulos)
+          if (list.length < 2 || sz.y < 8 || sz.x < 12 || Math.max(sz.x, sz.z) > 40) continue;
+          bg.translate(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
+          bg.computeVertexNormals();
+          const mm = m.clone();
+          if (mm.map) { mm.map.magFilter = mm.map.minFilter = THREE.NearestFilter; mm.map.colorSpace = THREE.SRGBColorSpace; mm.map.generateMipmaps = false; mm.map.needsUpdate = true; }
+          mm.alphaTest = 0.5; mm.side = THREE.DoubleSide;
+          out.push({ geo: bg, mat: mm, size: sz.clone() });
+        }
+      }
+    });
+    return out;
+  }));
+  return pieceCache.get(key);
+}
+
+// Costa Celeste: rocas en el mar alrededor de la isla y rocas, rocas rompibles y un cartel en la orilla
+async function decorateIsland(scene, W, H) {
+  let sea = [], land = [], small = [], signs = [];
+  try {
+    [sea, land, small, signs] = await Promise.all([
+      pieces('act2', /^sea_rock/i), pieces('act2', /^rock01/i), pieces('route19', /^obj/i), pieces('route19', /^board_[ef]/i),
+    ]);
+  } catch (e) { console.warn('adornos de la playa no disponibles', e); return; }
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const put = (p, x, y, z, k) => {
+    const m = new THREE.Mesh(p.geo, p.mat);
+    m.position.set(x, y, z);
+    m.scale.setScalar(k);
+    // sin girar: están hechas para verse desde la cámara (de sur a norte)
+    m.receiveShadow = true;
+    scene.add(m);
+  };
+  // isla de arena: arena W+520 de ancho y del norte (-H/2+30) a H/2+220
+  const ix = W / 2 + 260, iz0 = -H / 2 + 30, iz1 = H / 2 + 220;
+  const free = (x, z, m) => !(Math.abs(x) < ix + m && z > iz0 - m && z < iz1 + m);
+  // en el mar (no delante de la cámara)
+  // en grupitos de 1 a 3, como en los mapas de HGSS
+  if (sea.length) for (let i = 0, n = 0; i < 400 && n < 40; i++) {
+    const x = rnd(-W / 2 - 900, W / 2 + 900), z = rnd(-H / 2 - 700, H / 2 + 260);
+    if (!free(x, z, 70) || (z > H / 2 && Math.abs(x) < W / 2 + 400)) continue;
+    const k = 1 + ((Math.random() * 3) | 0);
+    for (let j = 0; j < k; j++) put(sea[(Math.random() * sea.length) | 0], x + j * 64, -14, z + (j % 2) * 30, 2);
+    n += k;
+  }
+  // en la arena de alrededor de la arena de combate
+  const shore = [...land, ...small];
+  if (shore.length) for (let i = 0, n = 0; i < 300 && n < 18; i++) {
+    const x = rnd(-ix + 30, ix - 30), z = rnd(iz0 + 20, H / 2 + 120);
+    if (Math.abs(x) < W / 2 + 40 && z < H / 2 + 20) continue; // dentro de la zona de combate no
+    if (z > H / 2 + 20 && Math.abs(x) < W / 2 - 100) continue; // ni delante de la cámara
+    put(shore[(Math.random() * shore.length) | 0], x, -0.6, z, 2);
+    n++;
+  }
+  if (signs.length) put(signs[0], -W / 2 - 120, -0.6, -H / 2 + 120, 2);
+}
+
 // Mar con la textura de agua de HGSS (se desplaza despacio para que parezca que se mueve)
 function addSea(scene) {
   // la textura de HGSS es sólo la espuma (transparente): se pinta sobre el azul del mar
@@ -234,7 +339,7 @@ function addSea(scene) {
 // Descarga y prepara por adelantado el mapa de un acto (se queda en caché)
 export function preloadMap(act) {
   const cfg = MAPS[act];
-  if (!cfg?.dir) return;
+  if (!cfg?.dir) { if (cfg) { loadDae('act2').catch(() => {}); loadDae('route19').catch(() => {}); } return; }
   loadDae(cfg.dir).catch(() => {});
   if (cfg.filler === 'trees') loadDae('trees').catch(() => {});
 }
@@ -265,7 +370,7 @@ function findSpot(grid, floor, W, H, maxScale = 9) {
 export async function addMap(scene, act, W, H) {
   const cfg = MAPS[act];
   if (!cfg) return false;
-  if (!cfg.dir) { addSea(scene); return { floor: cfg.floor, island: true }; }
+  if (!cfg.dir) { addSea(scene); await decorateIsland(scene, W, H); return { floor: cfg.floor, island: true }; }
   const map = await loadDae(cfg.dir);
   // escala y sitio: la zona más despejada del mapa, con tiles de HGSS (16) al menos al tamaño de los de la arena (32)
   // (con suelo propio, el mapa sólo decora alrededor: se coloca a mano con cfg.offset)
