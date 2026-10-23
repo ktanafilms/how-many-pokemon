@@ -16,7 +16,7 @@ export function bossCinematic(app, act) {
   const bossKey = ACTS[act].boss;
   const boss = ENEMIES[bossKey];
   const n = NPCS[intro.npc];
-  const big = window.innerWidth < 600 ? 4 : 6;
+  const big = window.innerWidth < 600 ? 5 : 8;
   const root = el(`<div class="cine act${act}">
     <div class="cine-bar top"></div><div class="cine-bar bot"></div>
     <div class="cine-band"><div class="cine-trainer"><img class="px" src="assets/npc/${n.img}.png" alt=""></div>
@@ -47,8 +47,11 @@ export function bossCinematic(app, act) {
   return (async () => {
     sfx('whoosh');
     await wait(450);
-    root.classList.add('t1'); // entra el entrenador
-    await wait(500);
+    root.classList.add('t1'); // entra la franja y el entrenador (en silueta)
+    await wait(650);
+    root.classList.add('lit'); // ¡se ilumina!
+    sfx('select');
+    await wait(450);
     for (const line of intro.lines.filter(l => !l.startsWith('Consejo'))) {
       if (skip) break;
       await say(line);

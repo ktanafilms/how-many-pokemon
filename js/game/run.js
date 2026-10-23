@@ -369,6 +369,8 @@ export function applyBattle(run, battle) {
   const persian = (run.spec.meowth?.stage || 0) >= 1;
   res.payday = battle.stats.meowth ? battle.stats.meowth.n * (persian ? 7 : 4) : 0;
   res.money = Math.round((18 + 7 * (run.round + 1) + killValue * 1.4) * (1 + (g.money || 0)) * (run.challenge ? 1.5 : 1) * (1 + (run.options?.[run.optIdx]?.bonus || 0))) + res.payday;
+  res.bonus = (run.options?.[run.optIdx]?.bonus || 0) + (run.challenge ? 0.5 : 0);
+  res.mods = (run.fightMods || []).filter(m => m !== 'normal').map(m => FIGHT_MODS[m].name);
   run.money += res.money;
   run.lastResult = res;
   return res;

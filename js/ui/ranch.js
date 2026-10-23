@@ -78,9 +78,10 @@ export function renderRanch(app) {
     <div class="bottom">
       <div class="map panel">
         <div class="rounds">${rounds}</div>
-        <div class="next-line"><b>${info.name}:</b> ${info.desc}</div>
-        ${fightOptions(run)}
-        <div class="foes">${foesPreview(run)}</div>
+        ${run.options?.length > 1
+          // con elección de combate, los rivales de cada opción se ven en su tarjeta (y al pasar por encima)
+          ? fightOptions(run)
+          : `<div class="next-line"><b>${info.name}:</b> ${info.desc}</div><div class="foes">${foesPreview(run)}</div>`}
         ${adviceLine(run)}
       </div>
       <div class="fight"><button class="btn big" data-act="fight">¡A LUCHAR!<small>${R.totalConscious(run)} Pokémon vs ${run.enemies.length}</small></button></div>
@@ -201,13 +202,23 @@ export function foeTip(run, k) {
     ${weak ? `<div class="tip-good">💥 Débil a: <b>${weak}</b></div>` : ''}${resist ? `<div class="tip-bad">🛡 Resiste: ${resist}</div>` : ''}${traits}`;
 }
 
+// Rivales de una opción (para su tooltip): especie, cantidad, tipos y a qué es débil
+function foeList(o) {
+  const counts = {};
+  for (const k of o.enemies) counts[k] = (counts[k] || 0) + 1;
+  return `<div class="tip-foes">${Object.entries(counts).map(([k, n]) => {
+    const weak = weakTo(k).slice(0, 3).map(t => TYPES[t].name).join(', ');
+    return `<div>${img(ENEMIES[k].dex)} <b>${ENEMIES[k].name} ×${n}</b> ${types(ENEMIES[k].types)}${weak ? `<small> · débil a ${weak}</small>` : ''}</div>`;
+  }).join('')}</div>`;
+}
+
 // Elegir combate (como en HMD): cada opción con su modificador y su premio extra
 function fightOptions(run) {
   if (!run.options || run.options.length < 2) return '';
   const cards = run.options.map((o, i) => {
     const t = R.fightTitle(o);
     const mods = o.mods.filter(m => m !== 'normal').map(m => R.FIGHT_MODS[m]);
-    const desc = mods.length ? mods.map(m => `<div><b>${m.name}:</b> ${m.desc}</div>`).join('') : R.FIGHT_MODS.normal.desc;
+    const desc = (mods.length ? mods.map(m => `<div><b>${m.name}:</b> ${m.desc}</div>`).join('') : R.FIGHT_MODS.normal.desc) + foeList(o);
     const shiny = o.mods.includes('shiny') ? 'shiny' : '';
     return `<button class="fopt ${i === run.optIdx ? 'on' : ''} ${shiny}" data-opt="${i}" ${tip(`<h4>${t.text}</h4>${desc}`)}>
       ${img(ENEMIES[t.main].dex, o.mods.includes('gigantes') ? 'giant' : o.mods.includes('horda') ? 'tiny' : '')}
@@ -216,7 +227,8 @@ function fightOptions(run) {
       ${o.bonus ? `<span class="fo-bonus">+${Math.round(o.bonus * 100)}% ₽</span>` : ''}
     </button>`;
   }).join('');
-  return `<div class="fight-opts"><span class="fo-label">Elige combate:</span>${cards}</div>`;
+  const r = R.currentRound(run);
+  return `<div class="fight-opts"><span class="fo-label">${R.ROUND_INFO[r.type].name} · Elige combate:</span>${cards}</div>`;
 }
 
 function foesPreview(run) {

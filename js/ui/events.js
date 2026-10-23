@@ -209,7 +209,7 @@ export function resultsModal(app, res, done) {
     ? `<div class="note">${icon({ img: 'assets/items/full-restore.png' }, 'mini')} ${res.koReport.reduce((a, b) => a + b.n, 0)} Pokémon debilitados descansarán entre 1 y 3 rondas.</div>` : '';
   const m = modal(`
     <h2 class="win-title">¡VICTORIA!</h2>
-    <div class="earn">Has ganado <span class="money">₽<b data-count="${res.money}">0</b></span>${res.payday ? ` <small>(₽${res.payday} de Día de Pago)</small>` : ''}</div>
+    <div class="earn">Has ganado <span class="money">₽<b data-count="${res.money}">0</b></span>${res.payday ? ` <small>(₽${res.payday} de Día de Pago)</small>` : ''}${res.bonus ? ` <span class="bonus-tag">+${Math.round(res.bonus * 100)}% ${res.mods?.length ? res.mods.join(' + ') : 'Reto'}</span>` : ''}</div>
     ${mvp ? `<div class="mvp">${img(res.names[mvp[0]][1])}<div><small>MVP del combate</small><b>${res.names[mvp[0]][0]}</b></div></div>` : ''}
     <table class="score"><tr><th>Especie</th><th>Daño</th><th>Derrotas</th><th>Curación</th><th>KO</th></tr>${rows}</table>
     ${ko}

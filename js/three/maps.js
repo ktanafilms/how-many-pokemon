@@ -108,6 +108,28 @@ function plainTexture(tex) {
   return mean > 0.22 && sd < 0.05;
 }
 
+// Máscara de borde irregular: dentro de la arena todo; en el margen de fuera, casillas sueltas al azar
+// (debajo de la arena el mapa está recortado, así que ahí no puede haber huecos)
+function jaggedMask(w, h, tile, iw, ih) {
+  const nx = Math.ceil(w / tile), nz = Math.ceil(h / tile);
+  const cv = document.createElement('canvas');
+  cv.width = nx; cv.height = nz;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, nx, nz);
+  g.fillStyle = '#fff';
+  for (let z = 0; z < nz; z++) for (let x = 0; x < nx; x++) {
+    const cx = (x + 0.5) * tile - w / 2, cz = (z + 0.5) * tile - h / 2;
+    const inside = Math.abs(cx) < iw / 2 + tile / 2 && Math.abs(cz) < ih / 2 + tile / 2;
+    // al sur (hacia la cámara) el borde es recto: ahí detrás sólo hay la franja aplanada
+    const p = inside || cz > ih / 2 ? 1 : 0.45;
+    if (Math.random() < p) g.fillRect(x, z, 1, 1);
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.magFilter = t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  return t;
+}
+
 // Plano grande con el mismo suelo del mapa, para que lo recortado no deje ver otra cosa
 function floorPlane(info, scale, size = 9000, sizeZ = size) {
   const tex = info.mat.map.clone();
@@ -272,7 +294,11 @@ export async function addMap(scene, act, W, H) {
   if (cfg.ownTex) {
     const c = info.cands?.find(([m]) => cfg.ownTex.test(m.name || ''));
     if (c) {
-      const fp = floorPlane({ mat: c[0], repeatWorld: c[1].w / c[1].u }, 1, W + 8, H + 8);
+      // algo mayor que la arena y con el borde irregular por casillas, para que se funda con el mapa
+      const fw = W + 96, fh = H + 64;
+      const fp = floorPlane({ mat: c[0], repeatWorld: c[1].w / c[1].u }, 1, fw, fh);
+      fp.material.alphaMap = jaggedMask(fw, fh, 32, W, H);
+      fp.material.alphaTest = 0.5;
       fp.position.y = 0.05;
       scene.add(fp);
       info.ownDone = true;

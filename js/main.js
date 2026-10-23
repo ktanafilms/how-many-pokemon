@@ -12,7 +12,8 @@ import { renderRanch } from './ui/ranch.js';
 import * as EV from './ui/events.js';
 import { talk, NPCS } from './ui/npc.js';
 import { bossCinematic } from './ui/cinematic.js';
-import { coach, tutorialSeen, RANCH_STEPS, BATTLE_STEPS } from './ui/tutorial.js';
+import { battleTransition, battleText } from './ui/transition.js';
+import { coach, tutorialSeen, RANCH_STEPS, battleSteps } from './ui/tutorial.js';
 import { el, ui, tip } from './ui/html.js';
 import { ARENA } from './game/sim.js';
 import { Battle3D } from './three/Battle3D.js';
@@ -25,7 +26,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 class App {
   constructor() {
     this.run = null;
-    this.speed = 1;
+    // la velocidad de combate elegida se recuerda entre combates
+    this.speed = (() => { try { return +localStorage.getItem('how-many-pokemon-speed') || 1; } catch (e) { return 1; } })();
     this.armed = -1;
     this.orient = App.wantOrient();
     // Vista 2.5D (three.js) por defecto si hay WebGL; se puede cambiar en el panel ♪
@@ -241,7 +243,7 @@ class App {
     const boss = setup.enemies.find(e => e.boss);
     playMusic(boss ? (r.act === ACTS.length - 1 ? 'final' : 'boss') : 'battle');
     sfx('whoosh');
-    this.vsIntro(setup, boss, async () => {
+    battleTransition({ boss: !!boss }, async () => {
       this.clearUI();
       if (this.use3d) {
         for (const k of ['Ranch', 'Battle']) if (this.game.scene.isActive(k)) this.game.scene.stop(k);
@@ -254,12 +256,21 @@ class App {
     }).then(() => {
       this.b3d?.go();
       if (this.use3d) this.camHint();
-      if (boss) this.banner(`¿Cuántos Pokémon hacen falta<small>para derrotar a ${boss.name}?</small>`);
+      // cuadro de texto como en los juegos
+      const fm = (this.run.fightMods || []).filter(m => m !== 'normal').map(m => R.FIGHT_MODS[m].name.toLowerCase());
+      if (boss) {
+        battleText(`¡${NPCS[bossIntro(this.run, r.act).npc].name} saca a <b>${boss.name}</b>!`, 2100);
+        setTimeout(() => this.banner(`¿Cuántos Pokémon hacen falta<small>para derrotar a ${boss.name}?</small>`), 2300);
+      } else {
+        const n = setup.enemies.length, k = this.hudFoes[0];
+        const who = this.hudFoes.length === 1 ? `${n === 1 ? 'Un' : n} <b>${k.name}</b> salvaje${n === 1 ? '' : 's'}` : `<b>${n}</b> Pokémon salvajes`;
+        battleText(`¡${n === 1 ? 'Aparece' : 'Aparecen'} ${who}!${fm.length ? ` <small>(${fm.join(' + ')})</small>` : ''}`);
+      }
       // primer combate: el Prof. Oak explica los controles (con el combate en pausa)
       if (!tutorialSeen('battle')) {
         const sp = this.speed;
         this.speed = 0;
-        setTimeout(() => coach('battle', BATTLE_STEPS).then(() => { this.speed = sp || 1; this.rerenderHud(); }), 900);
+        setTimeout(() => coach('battle', battleSteps(this.run.consumables, Object.fromEntries(Object.entries(CONSUMABLES).map(([k, c]) => [k, c.name])))).then(() => { this.speed = sp || 1; this.rerenderHud(); }), 900);
       }
       this.hudFoes.forEach((f, i) => setTimeout(() => cry(f.dex, { vol: f.boss ? 0.6 : 0.4 }), 150 + i * 260));
     });
@@ -326,7 +337,12 @@ class App {
     </div>`);
     hud.addEventListener('click', e => {
       const s = e.target.closest('[data-speed]');
-      if (s) { this.speed = +s.dataset.speed; this.rerenderHud(); return; }
+      if (s) {
+        this.speed = +s.dataset.speed;
+        if (this.speed > 0) try { localStorage.setItem('how-many-pokemon-speed', String(this.speed)); } catch (err) { /* nada */ }
+        this.rerenderHud();
+        return;
+      }
       const u = e.target.closest('[data-use]');
       if (u) this.useConsumable(+u.dataset.use);
     });
@@ -485,7 +501,7 @@ class App {
       R.advanceRound(this.run);
       if (this.run.won) { R.clearSave(); playMusic('halloffame'); EV.endScreen(this, true); return; }
       R.save(this.run);
-      this.wipe(() => { this.goRanch(); return this.ranch3d?.ready; });
+      battleTransition({ back: true }, () => { this.goRanch(); return this.ranch3d?.ready; });
     };
     next();
   }

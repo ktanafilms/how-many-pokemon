@@ -64,8 +64,16 @@ export const RANCH_STEPS = [
   { sel: '.fight', text: 'Cuando estés listo, ¡a luchar! El combate es <b>automático</b>; tú decides cuándo usar objetos.' },
 ];
 
+// el paso de los objetos habla de los que llevas de verdad
+export function battleSteps(cons, names) {
+  const has = [...new Set(cons)].map(k => names[k]);
+  const items = !has.length
+    ? { sel: '.hud-bottom .slot', text: 'Aquí aparecerán tus <b>objetos</b> (se compran en la Tienda Pokémon). Durante el combate, tócalos para usarlos.' }
+    : { sel: '.hud-bottom .slot:not(.empty)', text: `Tus <b>objetos</b>: ahora llevas ${has.map(n => `<b>${n}</b>`).join(', ')}. ${has.length > 1 ? "Tócalos" : "Tócalo"} durante el combate para usarlo${cons.includes('meteor') ? ' (el Meteorito, además, se apunta tocando el campo)' : ''}.` };
+  return [items, ...BATTLE_STEPS];
+}
+
 export const BATTLE_STEPS = [
-  { sel: '.hud-bottom .slot', text: 'Tus <b>objetos</b>: toca uno y luego el campo para usarlo (el Meteorito cae donde elijas).' },
   { sel: '.hud-bottom .speed', text: 'Pausa o acelera el combate. Arrastra para girar la cámara y usa la rueda (o pellizca) para acercarte.' },
   { sel: '.team-bars', text: 'Aquí ves cuánta vida le queda a cada especie de tu equipo.' },
 ];

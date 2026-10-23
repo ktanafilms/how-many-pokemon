@@ -437,7 +437,7 @@ export class Battle3D {
         v.lastHurt = u.lastHurt;
         if (now > v.hurtUntil + 0.3) v.hurtUntil = now + 0.07;
       }
-      v.flash.value = u.side && now < v.hurtUntil ? 0.85 : 0;
+      v.flash.value = u.side && now < v.hurtUntil ? 0.6 : 0;
       const ko = u.state === 'ko';
       v.mat.color.set(ko ? 0x8a8a9a : u.primal ? 0xff9a8a : u.buffs.berserk > 0 ? 0xffa070 : u.buffs.poisonT > 0 ? 0xd8a0ff : u.buffs.slowT > 0 ? 0xb0e8ff : 0xffffff);
       v.spr.visible = u.state !== 'burrow';
