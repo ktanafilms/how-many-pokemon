@@ -156,7 +156,8 @@ export class Battle3D {
     }
 
     // --- sombras (una sola malla instanciada) y anillos de rivales
-    const shTex = new THREE.CanvasTexture(radial('rgba(0,0,0,0.42)', 'rgba(0,0,0,0)'));
+    // sombra blanca teñida por instancia: azul bajo tus Pokémon (para distinguir bandos de un vistazo), negra bajo los rivales
+    const shTex = new THREE.CanvasTexture(radial('rgba(255,255,255,0.5)', 'rgba(255,255,255,0)'));
     this.shadowMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: shTex, transparent: true, depthWrite: false }), this.sim.units.length);
     this.shadowMesh.renderOrder = 1;
     scene.add(this.shadowMesh);
@@ -210,6 +211,12 @@ export class Battle3D {
       };
       v.outline = new THREE.Sprite(omat);
       this.scene.add(v.outline);
+      // "rayos X": si un rival queda detrás de tus Pokémon, se ve su silueta roja a través de ellos
+      const xmat = new THREE.SpriteMaterial({ map: tex, alphaTest: 0.4, color: u.boss ? 0xff9a3a : 0xff3a3a, transparent: true, opacity: 0.55, depthWrite: false, depthFunc: THREE.GreaterDepth, fog: false });
+      xmat.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n diffuseColor.rgb = diffuse;'); };
+      v.xray = new THREE.Sprite(xmat);
+      v.xray.renderOrder = 6;
+      this.scene.add(v.xray);
       v.ring = new THREE.Mesh(new THREE.RingGeometry(u.r * 1.2, u.r * 1.2 + (u.boss ? 6 : 4), 40), u.boss || u.elite ? this.bossRingMat : this.ringMat);
       v.ring.rotation.x = -Math.PI / 2;
       v.ring.scale.set(1, 1, 1);
@@ -243,6 +250,8 @@ export class Battle3D {
     if (v.outline) {
       v.outline.center.set(0.5, cy - 0.015);
       v.outline.scale.set(a.fw * v.scale * 1.07, a.fh * v.scale * 1.06, 1);
+      v.xray.center.copy(v.spr.center);
+      v.xray.scale.copy(v.spr.scale);
     }
   }
 
@@ -403,7 +412,7 @@ export class Battle3D {
         v.spr.material.opacity = Math.max(0, v.fade);
         if (v.fade <= 0 && v.spr.visible) {
           v.spr.visible = false;
-          if (v.outline) v.outline.visible = v.ring.visible = v.fill.visible = false;
+          if (v.outline) v.outline.visible = v.ring.visible = v.fill.visible = v.xray.visible = false;
         }
         continue;
       }
@@ -411,7 +420,7 @@ export class Battle3D {
         v.dead = true;
         v.spr.material.transparent = true;
         this.setAnim(v, 'Hurt', true);
-        if (v.outline) v.outline.visible = v.ring.visible = v.fill.visible = false;
+        if (v.outline) v.outline.visible = v.ring.visible = v.fill.visible = v.xray.visible = false;
         continue;
       }
       const x = u.x - W2, z = u.y - H2;
@@ -462,12 +471,16 @@ export class Battle3D {
       }
       v.flash.value = u.side && now < v.hurtUntil ? 0.6 : 0;
       const ko = u.state === 'ko';
+      // los debilitados se quedan atrás medio transparentes (para que no se confundan con los que luchan)
+      if (ko !== !!v.koFade) { v.koFade = ko; v.mat.transparent = ko; v.mat.opacity = ko ? 0.45 : 1; v.mat.needsUpdate = true; }
       v.mat.color.set(ko ? 0x8a8a9a : u.primal ? 0xff9a8a : u.buffs.berserk > 0 ? 0xffa070 : u.buffs.poisonT > 0 ? 0xd8a0ff : u.buffs.slowT > 0 ? 0xb0e8ff : 0xffffff);
       v.spr.visible = u.state !== 'burrow';
       if (v.outline) {
         v.outline.position.copy(v.spr.position);
         v.outline.position.y -= 0.5;
         v.outline.visible = v.spr.visible;
+        v.xray.position.copy(v.spr.position);
+        v.xray.visible = v.spr.visible;
         v.ring.position.set(x, 0.6, z);
         v.fill.position.set(x, 0.4, z);
       }
@@ -476,10 +489,12 @@ export class Battle3D {
       s3.set(sw, sw * 0.5, 1);
       p3.set(x, 0.2, z);
       m4.compose(p3, q, s3);
+      this.shadowMesh.setColorAt(si, u.side ? SH_FOE : ko ? SH_KO : SH_ALLY);
       this.shadowMesh.setMatrixAt(si++, m4);
     }
     this.shadowMesh.count = si;
     this.shadowMesh.instanceMatrix.needsUpdate = true;
+    if (this.shadowMesh.instanceColor) this.shadowMesh.instanceColor.needsUpdate = true;
   }
 
   // ---------- Cámara ----------
@@ -845,7 +860,7 @@ export class Battle3D {
   }
 
   floatText(u, h, str, color, size = 16) {
-    if (this.texts.length > 80) return;
+    if (this.texts.length > 45) return;
     this.texts.push({ x: u.x, y: u.y, h: h + (u.z || 0), str, color, size, t: 0, dx: (Math.random() - 0.5) * 20 });
   }
 
@@ -868,7 +883,8 @@ export class Battle3D {
         const v = this.view(id);
         if (!v) continue;
         const color = a.eff > 1 ? '#ffe14a' : a.eff < 1 ? '#b8b8c8' : '#ffffff';
-        this.floatText(v.u, 30 * v.u.size, fmt(a.dmg) + (a.crit ? '!' : ''), color, a.crit ? 22 : 16);
+        // sólo los números que importan: críticos, muy eficaces, jefes o golpes grandes (si no, es ruido)
+        if (a.crit || a.eff > 1 || v.u.boss || a.dmg > v.u.maxHp * 0.12 || this.texts.length < 12) this.floatText(v.u, 30 * v.u.size, fmt(a.dmg) + (a.crit ? '!' : ''), color, a.crit ? 22 : 16);
         if (a.eff > 1 && Math.random() < 0.15) this.floatText(v.u, 48 * v.u.size, '¡Es muy eficaz!', '#ffe14a', 14);
       }
       this.dmgAcc.clear();
@@ -918,15 +934,16 @@ export class Battle3D {
       const head = ((v.m.foot ?? 28) - 6) * v.scale;
       const top = this.toScreen(u.x, u.y, (u.z || 0) + v.dropY + head);
       if (top.behind) continue;
-      if (u.side && !u.boss) {
-        const w = Math.max(34, 22 * u.size * top.s * 1.1) * ts, bh = 4 * ts;
+      if (u.side && !u.boss && (p < 0.999 || this.sim.t < 3 || u.elite)) {
+        const w = Math.max(30, 20 * u.size * top.s) * ts, bh = 4 * ts;
         const x = top.x - w / 2, y = top.y - 8;
         c.fillStyle = '#283048'; roundRect(c, x - 3, y - 3, w + 6, bh + 6, 3); c.fill();
         c.fillStyle = '#505868'; c.fillRect(x, y, w, bh);
         const col = p > 0.5 ? ['#70f8a8', '#18c020'] : p > 0.2 ? ['#f8e038', '#c8a800'] : ['#f85838', '#a82010'];
         c.fillStyle = col[1]; c.fillRect(x, y, w * p, bh);
         c.fillStyle = col[0]; c.fillRect(x, y, w * p, Math.max(1, bh * 0.4));
-        const la = this.introT > 0.3 ? 0 : clamp(4.5 - this.sim.t, 0, 1);
+        // nombres: al principio para saber quién es quién; los Alfa y variocolor, siempre
+        const la = u.elite || u.shiny ? 1 : clamp(3 - this.sim.t, 0, 1);
         if (la > 0) {
           c.globalAlpha = la;
           c.font = `${Math.round(15 * ts)}px PowerClearBold`;
@@ -979,7 +996,7 @@ export class Battle3D {
         const s = this.toScreen(x, y, h);
         const r = f.r * s.s * 1.4;
         // estela
-        if (f.trail && Math.random() < 0.6) this.parts.add({ kind: 'dot', x, y, h, vh: 10, life: 0.3, size: f.r * 0.5, color: f.trail });
+        if (f.trail && Math.random() < 0.35) this.parts.add({ kind: 'dot', x: x + (Math.random() - 0.5) * 4, y, h, vh: 14, life: 0.22, size: f.r * 0.32, grow: -0.5, color: f.trail, alpha: 0.7 });
         c.fillStyle = f.color; c.beginPath(); c.arc(s.x, s.y, r, 0, 7); c.fill();
         c.fillStyle = 'rgba(255,255,255,.85)'; c.beginPath(); c.arc(s.x, s.y, r * 0.45, 0, 7); c.fill();
         if (f.star) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.arc(s.x, s.y, r + 3, 0, 7); c.stroke(); }
@@ -1082,6 +1099,7 @@ export class Battle3D {
 
 // ---------- utilidades ----------
 const rnd = (a, b) => a + Math.random() * (b - a);
+const SH_ALLY = new THREE.Color(0x1d4cc8), SH_FOE = new THREE.Color(0x000000), SH_KO = new THREE.Color(0x303038);
 const AMBIENT = {
   0: { rate: 7, p: () => ({ kind: 'leaf', color: Math.random() < 0.5 ? '#6ab04a' : '#9ad06a', h: rnd(90, 180), vx: rnd(20, 45), vy: rnd(-5, 10), vh: rnd(-22, -12), life: 7, size: 2.2, spin: rnd(2, 5), alpha: 0.9 }) },
   1: { rate: 6, p: () => ({ kind: 'dot', color: '#f0e0c0', h: rnd(10, 120), vx: rnd(-8, 8), vy: rnd(-6, 6), vh: rnd(-4, 6), life: 5, size: 1.2, alpha: 0.5 }) },

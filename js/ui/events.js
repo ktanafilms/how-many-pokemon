@@ -222,9 +222,14 @@ function coinShower(target, n) {
 export function resultsModal(app, res, done) {
   const best = Object.entries(res.stats).sort((a, b) => b[1].dmg - a[1].dmg);
   const mvp = best[0];
-  const rows = best.map(([k, s]) => `
+  // tabla compacta: barra de daño relativa al MVP; curación sólo si alguien ha curado
+  const healed = best.some(([, s]) => s.heal > 0);
+  const top = best[0]?.[1].dmg || 1;
+  const shown = best.slice(0, 6), rest = best.slice(6);
+  const rows = shown.map(([k, s]) => `
     <tr><td>${img(res.names[k][1])}${res.names[k][0]} <small>×${s.n}</small></td>
-    <td>${Math.round(s.dmg)}</td><td>${s.kills}</td><td>${Math.round(s.heal)}</td><td class="${s.ko ? 'bad' : ''}">${s.ko}</td></tr>`).join('');
+    <td class="dmg"><span class="dbar" style="--w:${Math.max(2, s.dmg / top * 100)}%"></span>${Math.round(s.dmg)}</td><td>${s.kills || '–'}</td>${healed ? `<td>${Math.round(s.heal) || '–'}</td>` : ''}<td class="${s.ko ? 'bad' : ''}">${s.ko || '–'}</td></tr>`).join('')
+    + (rest.length ? `<tr class="more"><td colspan="${healed ? 5 : 4}">y ${rest.length} especie${rest.length > 1 ? 's' : ''} más (${rest.map(([k]) => res.names[k][0]).join(', ')})</td></tr>` : '');
   const ko = res.koReport.length
     ? `<div class="note">${icon({ img: 'assets/items/full-restore.png' }, 'mini')} ${res.koReport.reduce((a, b) => a + b.n, 0)} Pokémon debilitados descansarán entre 1 y 3 rondas.</div>` : '';
   const m = modal(`
@@ -232,7 +237,7 @@ export function resultsModal(app, res, done) {
     <div class="earn">Has ganado <span class="money">₽<b data-count="${res.money}">0</b></span>${res.payday ? ` <small>(₽${res.payday} de Día de Pago)</small>` : ''}${res.bonus ? ` <span class="bonus-tag">+${Math.round(res.bonus * 100)}% ${res.mods?.length ? res.mods.join(' + ') : 'Reto'}</span>` : ''}</div>
     ${res.perfect || res.fast ? `<div class="medals">${res.perfect ? `<span class="medal">✦ Sin bajas <b>+15%</b></span>` : ''}${res.fast ? `<span class="medal">⚡ Victoria rápida <b>+10%</b></span>` : ''}</div>` : ''}
     ${mvp ? `<div class="mvp">${img(res.names[mvp[0]][1])}<div><small>MVP del combate</small><b>${res.names[mvp[0]][0]}</b></div></div>` : ''}
-    <table class="score"><tr><th>Especie</th><th>Daño</th><th>Derrotas</th><th>Curación</th><th>KO</th></tr>${rows}</table>
+    <table class="score"><tr><th>Especie</th><th>Daño</th><th>Derrotas</th>${healed ? '<th>Curación</th>' : ''}<th>KO</th></tr>${rows}</table>
     ${ko}
     <div class="actions"><button class="btn" data-close>¡GENIAL!</button></div>`, { onClose: done });
   stagger(m);

@@ -7,7 +7,7 @@ export function arenaBounds(w, h) {
   return { w, h, l: 56, r: w - 56, t: 120, b: h - 46, portrait: h > w };
 }
 const STEP = 1 / 60;
-const ALLY_R = 7;
+const ALLY_R = 8;
 const CELL = 32;
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -778,7 +778,7 @@ export class Battle {
             // cada pareja una sola vez; las mixtas las resuelve el enemigo (que mira más celdas)
             if (u.side === o.side) { if (o.id <= u.id) continue; } else if (u.side === 0) continue;
             const dx = o.x - u.x, dy = o.y - u.y;
-            const min = (u.r + o.r) * (u.side === o.side ? 0.85 : 0.95);
+            const min = (u.r + o.r) * (u.side === o.side ? 1 : 0.95);
             const d2 = dx * dx + dy * dy;
             if (d2 >= min * min || d2 === 0) continue;
             const d = Math.sqrt(d2), push = (min - d);

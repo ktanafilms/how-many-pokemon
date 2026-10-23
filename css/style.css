@@ -713,7 +713,6 @@ body.killcam .team-bars { opacity: 0; }
 .row-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .dex-modal { width: min(900px, 94vw); max-height: 88vh; display: flex; flex-direction: column; }
 .dex-tabs { display: flex; gap: 6px; justify-content: center; margin: 4px 0 8px; }
-.dex-tabs .btn.on { background: linear-gradient(var(--yellow-l), var(--yellow)); }
 .dex-body { overflow-y: auto; min-height: 0; flex: 1; padding: 2px; }
 .dex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
 .dex-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; background: #f4f7fc; border: 2px solid #c8d4ea; border-radius: 10px; padding: 6px 4px; font-size: 13px; text-align: center; }
@@ -736,3 +735,29 @@ body.killcam .team-bars { opacity: 0; }
 .unlock p { margin: 2px 0 0; font-size: 12px; color: #5a6478; }
 .unlock.out { transform: translateX(120%); opacity: 0; transition: transform .4s, opacity .4s; }
 @keyframes unlockin { from { transform: translateX(120%); } }
+
+/* ---- Pulido de menús (v2.9) ---- */
+/* panel inferior del rancho: cabe todo (rondas más compactas) */
+.bottom { height: 150px; }
+.sidebar { bottom: 168px; }
+.map { gap: 3px; padding: 6px 12px; }
+.map .rnd .ic { width: 22px; height: 22px; }
+.map .rnd { font-size: 12px; }
+.foe img { width: 28px; height: 28px; }
+.foe { padding: 1px 8px 1px 2px; }
+/* título: fila de botones secundarios uniforme */
+.title-screen .row-btns .btn { min-width: 150px; display: inline-flex; align-items: center; gap: 6px; justify-content: center; }
+.title-screen .row-btns .btn img { width: 22px; height: 22px; image-rendering: pixelated; }
+.title-screen .row-btns .btn.ghost { --c: rgba(20,24,48,.55); --cl: rgba(40,48,80,.7); --cd: rgba(255,255,255,.6); }
+/* Pokédex: pestañas legibles y estrellas grandes */
+.dex-tabs .btn:not(.on) { opacity: .85; }
+.stars .st { font-size: 18px; -webkit-text-stroke: 1px rgba(40,48,72,.5); }
+.dex-cell b { font-size: 13px; }
+/* MVP en las barras de vida: estrella dentro de la fila */
+.tb.mvp::before { content: '★'; position: static; order: 3; color: #ffcb05; font-size: 13px; text-shadow: 1px 1px 0 #000; margin-left: -2px; }
+.score td.dmg { position: relative; min-width: 120px; }
+.score .dbar { display: inline-block; width: calc(var(--w) * .7); max-width: 70%; height: 8px; border-radius: 4px; background: linear-gradient(#ffb43a, #e86a1a); margin-right: 6px; vertical-align: middle; }
+.score tr.more td { font-size: 12px; color: #8a94a8; text-align: center; }
+/* con zoom, los vh también se escalan: se compensa para usar toda la altura */
+.modal { max-height: calc(92vh / var(--z, 1)); }
+.dex-modal { max-height: calc(88vh / var(--z, 1)); }

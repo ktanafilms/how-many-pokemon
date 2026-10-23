@@ -127,7 +127,7 @@ class App {
         <div class="buttons">
           ${saved && !saved.won ? `<button class="btn big" data-continue>Continuar <small>Ronda ${saved.round + 1} · ${ACTS[saved.map[saved.round].act].name}</small></button>` : ''}
           <button class="btn big red" data-new>Nueva partida</button>
-          <div class="row-btns"><button class="btn small blue" data-daily>📅 Reto diario</button><button class="btn small blue" data-dex>📖 Pokédex y logros</button><button class="btn small ghost" data-sound>♪ Sonido</button></div>
+          <div class="row-btns"><button class="btn small blue" data-daily><img src="assets/items/town-map.png" alt="">Reto diario</button><button class="btn small blue" data-dex><img src="assets/items/poke-ball.png" alt="">Pokédex y logros</button><button class="btn small ghost" data-sound>♪ Sonido</button></div>
         </div>
         <div class="press">Toca para activar el sonido</div>
         <div class="foot">Fan game sin ánimo de lucro inspirado en <i>How Many Dudes?</i> (Butterscotch Shenanigans).<br>

@@ -157,7 +157,7 @@ function holeMaterial(m, hole) {
   m.transparent = false;
   m.side = THREE.DoubleSide;
   m.onBeforeCompile = sh => {
-    Object.assign(sh.uniforms, { uHole: { value: hole.rect }, uSouth: { value: hole.south }, uFloor: { value: hole.floor }, uInside: { value: tallGrass ? 1e6 : hole.inside } });
+    Object.assign(sh.uniforms, { uHole: { value: hole.rect }, uSouth: { value: hole.south }, uFloor: { value: hole.floor }, uInside: { value: tallGrass ? (hole.inside < 1e5 ? -1e6 : 1e6) : hole.inside } });
     sh.vertexShader = 'varying vec3 vWorldH;\nuniform vec4 uHole;\nuniform float uFloor;\nuniform float uInside;\nuniform float uSouth;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
       vWorldH = (modelMatrix * vec4(transformed, 1.0)).xyz;
       ${terrain ? `bool inArena = uInside < 1e5 && vWorldH.x > uHole.x - 40.0 && vWorldH.x < uHole.z + 40.0 && vWorldH.z > uHole.y - 40.0 && vWorldH.z < uHole.w + 40.0;
